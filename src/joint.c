@@ -657,7 +657,7 @@ b3JointId b3CreateMotionLockJoint( b3WorldId worldId, const b3MotionLockJointDef
 	B3_CHECK_JOINT_DEF( def );
 	B3_CHECK_INPUT_RETURN( b3IsValidJointDef( &def->base ), (b3JointId){ 0 } );
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3JointId){ 0 };
@@ -675,6 +675,7 @@ b3JointId b3CreateMotionLockJoint( b3WorldId worldId, const b3MotionLockJointDef
 
 	b3JointId jointId = { joint->jointId + 1, world->worldId, pair.joint->generation };
 	B3_REC_CREATE( world, CreateMotionLockJoint, jointId, worldId, *def );
+	b3WorldUnlockForRead( world );
 	return jointId;
 }
 
