@@ -92,19 +92,55 @@ void b3RemoveHullFromDatabase( b3World* world, const b3HullData* data )
 	}
 }
 
-b3World* b3GetUnlockedWorldFromId( b3WorldId id )
+b3World* b3GetWorldForReadFromId( b3WorldId id )
 {
 	B3_ASSERT( 1 <= id.index1 && id.index1 <= B3_MAX_WORLDS );
 	b3World* world = b3_worlds + ( id.index1 - 1 );
 	B3_ASSERT( id.index1 == world->worldId + 1 );
 	B3_ASSERT( id.generation == world->generation );
 
+	if (world->lockForRead)
+	{
+		world->lockForRead( world->lockContext );
+	}
+
 	// A world accessed from an id should not be locked
 	if ( world->locked )
 	{
 		B3_ASSERT( false );
+		if ( world->unlockForRead )
+		{
+			world->unlockForRead( world->lockContext );
+		}
 		return NULL;
 	}
+	return world;
+}
+
+b3World* b3GetWorldForWriteFromId( b3WorldId id )
+{
+	B3_ASSERT( 1 <= id.index1 && id.index1 <= B3_MAX_WORLDS );
+	b3World* world = b3_worlds + ( id.index1 - 1 );
+	B3_ASSERT( id.index1 == world->worldId + 1 );
+	B3_ASSERT( id.generation == world->generation );
+
+	if ( world->lockForWrite )
+	{
+		world->lockForWrite( world->lockContext );
+	}
+
+	if ( world->locked )
+	{
+		B3_ASSERT( false );
+		if ( world->unlockForWrite )
+		{
+			world->unlockForWrite( world->lockContext );
+		}
+		return NULL;
+	}
+
+	world->locked = true;
+
 	return world;
 }
 
@@ -125,18 +161,100 @@ b3World* b3GetWorld( int index )
 	return world;
 }
 
-b3World* b3GetUnlockedWorld( int index )
+b3World* b3GetWorldForRead( int index )
 {
 	B3_ASSERT( 0 <= index && index < B3_MAX_WORLDS );
 	b3World* world = b3_worlds + index;
 	B3_ASSERT( world->worldId == index );
+	if ( world->lockForRead )
+	{
+		world->lockForRead( world->lockContext );
+	}
 	if ( world->locked )
 	{
 		B3_ASSERT( false );
+		if ( world->unlockForRead )
+		{
+			world->unlockForRead( world->lockContext );
+		}
 		return NULL;
 	}
 
 	return world;
+}
+
+b3World* b3GetWorldForWrite( int index )
+{
+	B3_ASSERT( 0 <= index && index < B3_MAX_WORLDS );
+	b3World* world = b3_worlds + index;
+	B3_ASSERT( world->worldId == index );
+	if ( world->lockForWrite )
+	{
+		world->lockForWrite( world->lockContext );
+	}
+	if ( world->locked )
+	{
+		B3_ASSERT( false );
+		if ( world->unlockForWrite )
+		{
+			world->unlockForWrite( world->lockContext );
+		}
+		return NULL;
+	}
+	
+	world->locked = true;
+
+	return world;
+}
+
+void b3WorldLockForWrite( b3World* world )
+{
+	if ( world->lockForWrite )
+	{
+		world->lockForWrite( world->lockContext );
+	}
+
+	B3_ASSERT( !world->locked );
+	world->locked = true;
+}
+
+void b3WorldUnlockForRead( b3World* world )
+{
+	B3_ASSERT( !world->locked );
+	if ( world->unlockForRead )
+	{
+		world->unlockForRead( world->lockContext );
+	}
+}
+
+void b3WorldUnlockForWrite( b3World* world )
+{
+	B3_ASSERT( world->locked );
+	world->locked = false;
+	if ( world->unlockForWrite )
+	{
+		world->unlockForWrite( world->lockContext );
+	}
+}
+
+void b3ConvertWorldReadToWrite( b3World* world )
+{
+	B3_ASSERT( !world->locked );
+	world->locked = true;
+	if ( world->convertReadToWrite )
+	{
+		world->convertReadToWrite( world->lockContext );
+	}
+}
+
+void b3ConvertWorldWriteToRead( b3World* world )
+{
+	B3_ASSERT( world->locked );
+	world->locked = false;
+	if ( world->convertWriteToRead )
+	{
+		world->convertWriteToRead( world->lockContext );
+	}
 }
 
 static void* b3DefaultAddTaskFcn( b3TaskCallback* task, void* taskContext, void* userContext, const char* name )
@@ -402,6 +520,14 @@ b3WorldId b3CreateWorld( const b3WorldDef* def )
 	world->destroyDebugShape = def->destroyDebugShape;
 	world->userDebugShapeContext = def->userDebugShapeContext;
 
+	world->lockForRead = def->lockForRead;
+	world->lockForWrite = def->lockForWrite;
+	world->unlockForRead = def->unlockForRead;
+	world->unlockForWrite = def->unlockForWrite;
+	world->convertReadToWrite = def->convertReadToWrite;
+	world->convertWriteToRead = def->convertWriteToRead;
+	world->lockContext = def->lockContext;
+
 	// add one to worldId so that 0 represents a null b3WorldId
 	return (b3WorldId){ (uint16_t)( worldId + 1 ), world->generation };
 }
@@ -410,13 +536,11 @@ void b3DestroyWorld( b3WorldId worldId )
 {
 	b3AtomicFetchAddInt( &b3_worldCount, -1 );
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForWriteFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
 	}
-
-	world->locked = true;
 
 	// Detach any recording before teardown. The user owns and frees the recording buffer.
 	b3StopRecordingInternal( world );
@@ -1039,15 +1163,13 @@ static void b3Collide( b3StepContext* context )
 
 void b3World_Step( b3WorldId worldId, float timeStep, int subStepCount )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForWriteFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
 	}
 
 	B3_REC( world, Step, worldId, timeStep, subStepCount );
-
-	world->locked = true;
 
 	b3TracyCZoneNC( world_step, "Step", b3_colorBox2DGreen, true );
 
@@ -1178,7 +1300,8 @@ void b3World_Step( b3WorldId worldId, float timeStep, int subStepCount )
 	world->endEventArrayIndex = 1 - world->endEventArrayIndex;
 	b3Array_Clear( world->sensorEndEvents[world->endEventArrayIndex] );
 	b3Array_Clear( world->contactEndEvents[world->endEventArrayIndex] );
-	world->locked = false;
+
+	b3WorldUnlockForWrite( world );
 
 	if ( world->recording != NULL )
 	{
@@ -1372,7 +1495,7 @@ static bool DrawQueryCallback( int proxyId, uint64_t userData, void* context )
 
 void b3World_Draw( b3WorldId worldId, b3DebugDraw* draw, uint64_t maskBits )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -1712,11 +1835,13 @@ void b3World_Draw( b3WorldId worldId, b3DebugDraw* draw, uint64_t maskBits )
 			draw->DrawStringFcn( ps, buffer, line->color, draw->context );
 		}
 	}
+
+	b3WorldUnlockForRead( world );
 }
 
 b3AABB b3World_GetBounds( b3WorldId worldId )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3AABB){ 0 };
@@ -1746,12 +1871,13 @@ b3AABB b3World_GetBounds( b3WorldId worldId )
 		}
 	}
 
+	b3WorldUnlockForRead( world );
 	return worldBounds;
 }
 
 b3BodyEvents b3World_GetBodyEvents( b3WorldId worldId )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3BodyEvents){ 0 };
@@ -1759,12 +1885,13 @@ b3BodyEvents b3World_GetBodyEvents( b3WorldId worldId )
 
 	int count = world->bodyMoveEvents.count;
 	b3BodyEvents events = { world->bodyMoveEvents.data, count };
+	b3WorldUnlockForRead( world );
 	return events;
 }
 
 b3SensorEvents b3World_GetSensorEvents( b3WorldId worldId )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3SensorEvents){ 0 };
@@ -1782,12 +1909,13 @@ b3SensorEvents b3World_GetSensorEvents( b3WorldId worldId )
 		.beginCount = beginCount,
 		.endCount = endCount,
 	};
+	b3WorldUnlockForRead( world );
 	return events;
 }
 
 b3ContactEvents b3World_GetContactEvents( b3WorldId worldId )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3ContactEvents){ 0 };
@@ -1809,12 +1937,13 @@ b3ContactEvents b3World_GetContactEvents( b3WorldId worldId )
 		.hitCount = hitCount,
 	};
 
+	b3WorldUnlockForRead( world );
 	return events;
 }
 
 b3JointEvents b3World_GetJointEvents( b3WorldId worldId )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3JointEvents){ 0 };
@@ -1822,6 +1951,7 @@ b3JointEvents b3World_GetJointEvents( b3WorldId worldId )
 
 	int count = world->jointEvents.count;
 	b3JointEvents events = { world->jointEvents.data, count };
+	b3WorldUnlockForRead( world );
 	return events;
 }
 
@@ -1980,7 +2110,7 @@ bool b3Contact_IsValid( b3ContactId id )
 
 void b3World_EnableSleeping( b3WorldId worldId, bool flag )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -1988,6 +2118,7 @@ void b3World_EnableSleeping( b3WorldId worldId, bool flag )
 
 	if ( flag == world->enableSleep )
 	{
+		b3WorldUnlockForRead( world );
 		return;
 	}
 
@@ -2007,6 +2138,7 @@ void b3World_EnableSleeping( b3WorldId worldId, bool flag )
 			}
 		}
 	}
+	b3WorldUnlockForRead( world );
 }
 
 bool b3World_IsSleepingEnabled( b3WorldId worldId )
@@ -2017,7 +2149,7 @@ bool b3World_IsSleepingEnabled( b3WorldId worldId )
 
 void b3World_EnableWarmStarting( b3WorldId worldId, bool flag )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -2026,6 +2158,7 @@ void b3World_EnableWarmStarting( b3WorldId worldId, bool flag )
 	B3_REC( world, WorldEnableWarmStarting, worldId, flag );
 
 	world->enableWarmStarting = flag;
+	b3WorldUnlockForRead( world );
 }
 
 bool b3World_IsWarmStartingEnabled( b3WorldId worldId )
@@ -2036,29 +2169,32 @@ bool b3World_IsWarmStartingEnabled( b3WorldId worldId )
 
 void b3World_EnableSSE2Fallback( b3WorldId worldId, bool flag )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
 	}
 
 	world->simdWidth = flag ? 4 : b3GetSIMDWidth();
+	b3WorldUnlockForRead( world );
 }
 
 int b3World_GetAwakeBodyCount( b3WorldId worldId )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return 0;
 	}
 	b3SolverSet* awakeSet = b3GetSolverSet( world, b3_awakeSet );
-	return awakeSet->bodySims.count;
+	int count = awakeSet->bodySims.count;
+	b3WorldUnlockForRead( world );
+	return count;
 }
 
 void b3World_EnableContinuous( b3WorldId worldId, bool flag )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -2067,6 +2203,7 @@ void b3World_EnableContinuous( b3WorldId worldId, bool flag )
 	B3_REC( world, WorldEnableContinuous, worldId, flag );
 
 	world->enableContinuous = flag;
+	b3WorldUnlockForRead( world );
 }
 
 bool b3World_IsContinuousEnabled( b3WorldId worldId )
@@ -2077,7 +2214,7 @@ bool b3World_IsContinuousEnabled( b3WorldId worldId )
 
 void b3World_SetRestitutionThreshold( b3WorldId worldId, float value )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -2086,6 +2223,7 @@ void b3World_SetRestitutionThreshold( b3WorldId worldId, float value )
 	B3_REC( world, WorldSetRestitutionThreshold, worldId, value );
 
 	world->restitutionThreshold = b3ClampFloat( value, 0.0f, FLT_MAX );
+	b3WorldUnlockForRead( world );
 }
 
 float b3World_GetRestitutionThreshold( b3WorldId worldId )
@@ -2096,7 +2234,7 @@ float b3World_GetRestitutionThreshold( b3WorldId worldId )
 
 void b3World_SetRestitutionIterations( b3WorldId worldId, int iterations )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -2105,12 +2243,14 @@ void b3World_SetRestitutionIterations( b3WorldId worldId, int iterations )
 	iterations = b3ClampInt( iterations, 0, B3_MAX_RESTITUTION_ITERATIONS );
 	if ( iterations == world->restitutionIterations )
 	{
+		b3WorldUnlockForRead( world );
 		return;
 	}
 
 	B3_REC( world, WorldSetRestitutionIterations, worldId, iterations );
 
 	world->restitutionIterations = iterations;
+	b3WorldUnlockForRead( world );
 }
 
 int b3World_GetRestitutionIterations( b3WorldId worldId )
@@ -2121,7 +2261,7 @@ int b3World_GetRestitutionIterations( b3WorldId worldId )
 
 void b3World_EnableRestitutionPropagation( b3WorldId worldId, bool flag )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -2129,12 +2269,14 @@ void b3World_EnableRestitutionPropagation( b3WorldId worldId, bool flag )
 
 	if ( flag == world->enableRestitutionPropagation )
 	{
+		b3WorldUnlockForRead( world );
 		return;
 	}
 
 	B3_REC( world, WorldEnableRestitutionPropagation, worldId, flag );
 
 	world->enableRestitutionPropagation = flag;
+	b3WorldUnlockForRead( world );
 }
 
 bool b3World_IsRestitutionPropagationEnabled( b3WorldId worldId )
@@ -2145,7 +2287,7 @@ bool b3World_IsRestitutionPropagationEnabled( b3WorldId worldId )
 
 void b3World_SetHitEventThreshold( b3WorldId worldId, float value )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -2154,6 +2296,7 @@ void b3World_SetHitEventThreshold( b3WorldId worldId, float value )
 	B3_REC( world, WorldSetHitEventThreshold, worldId, value );
 
 	world->hitEventThreshold = b3ClampFloat( value, 0.0f, FLT_MAX );
+	b3WorldUnlockForRead( world );
 }
 
 float b3World_GetHitEventThreshold( b3WorldId worldId )
@@ -2164,7 +2307,7 @@ float b3World_GetHitEventThreshold( b3WorldId worldId )
 
 void b3World_SetContactTuning( b3WorldId worldId, float hertz, float dampingRatio, float contactSpeed )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -2175,6 +2318,7 @@ void b3World_SetContactTuning( b3WorldId worldId, float hertz, float dampingRati
 	world->contactHertz = b3ClampFloat( hertz, 0.0f, FLT_MAX );
 	world->contactDampingRatio = b3ClampFloat( dampingRatio, 0.0f, FLT_MAX );
 	world->contactSpeed = b3ClampFloat( contactSpeed, 0.0f, FLT_MAX );
+	b3WorldUnlockForRead( world );
 }
 
 void b3World_SetContactRecycleDistance( b3WorldId worldId, float recycleDistance )
@@ -2201,7 +2345,7 @@ void b3World_SetMaximumLinearSpeed( b3WorldId worldId, float maximumLinearSpeed 
 {
 	B3_ASSERT( b3IsValidFloat( maximumLinearSpeed ) && maximumLinearSpeed > 0.0f );
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -2210,6 +2354,7 @@ void b3World_SetMaximumLinearSpeed( b3WorldId worldId, float maximumLinearSpeed 
 	B3_REC( world, WorldSetMaximumLinearSpeed, worldId, maximumLinearSpeed );
 
 	world->maxLinearSpeed = maximumLinearSpeed;
+	b3WorldUnlockForRead( world );
 }
 
 float b3World_GetMaximumLinearSpeed( b3WorldId worldId )
@@ -2222,7 +2367,7 @@ void b3World_SetIsotropicInertiaTolerance( b3WorldId worldId, float tolerance )
 {
 	B3_ASSERT( b3IsValidFloat( tolerance ) );
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -2231,6 +2376,7 @@ void b3World_SetIsotropicInertiaTolerance( b3WorldId worldId, float tolerance )
 	B3_REC( world, WorldSetIsotropicInertiaTolerance, worldId, tolerance );
 
 	world->isotropicInertiaTolerance = b3ClampFloat( tolerance, 0.0f, 1.0f );
+	b3WorldUnlockForRead( world );
 }
 
 float b3World_GetIsotropicInertiaTolerance( b3WorldId worldId )
@@ -2241,22 +2387,26 @@ float b3World_GetIsotropicInertiaTolerance( b3WorldId worldId )
 
 b3Profile b3World_GetProfile( b3WorldId worldId )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3Profile){ 0 };
 	}
-	return world->profile;
+	b3Profile profile = world->profile;
+	b3WorldUnlockForRead( world );
+	return profile;
 }
 
 b3Capacity b3World_GetMaxCapacity( b3WorldId worldId )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3Capacity){ 0 };
 	}
-	return world->maxCapacity;
+	b3Capacity maxCapacity = world->maxCapacity;
+	b3WorldUnlockForRead( world );
+	return maxCapacity;
 }
 
 void b3World_SetUserData( b3WorldId worldId, void* userData )
@@ -2273,29 +2423,31 @@ void* b3World_GetUserData( b3WorldId worldId )
 
 void b3World_SetFrictionCallback( b3WorldId worldId, b3FrictionCallback* callback )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
 	}
 
 	world->frictionCallback = callback != NULL ? callback : b3DefaultFrictionCallback;
+	b3WorldUnlockForRead( world );
 }
 
 void b3World_SetRestitutionCallback( b3WorldId worldId, b3RestitutionCallback* callback )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
 	}
 
 	world->restitutionCallback = callback != NULL ? callback : b3DefaultRestitutionCallback;
+	b3WorldUnlockForRead( world );
 }
 
 void b3World_SetWorkerCount( b3WorldId worldId, int count )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -2303,47 +2455,58 @@ void b3World_SetWorkerCount( b3WorldId worldId, int count )
 
 	if ( count == world->workerCount )
 	{
+		b3WorldUnlockForRead( world );
 		return;
 	}
 
 	b3DestroyWorkerContexts( world );
 	world->workerCount = b3ClampInt( count, 1, B3_MAX_WORKERS );
 	b3CreateWorkerContexts( world );
+	b3WorldUnlockForRead( world );
 }
 
 int b3World_GetWorkerCount( b3WorldId worldId )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return 0;
 	}
-
-	return world->workerCount;
+	int workerCount = world->workerCount;
+	b3WorldUnlockForRead( world );
+	return workerCount;
 }
 
 void b3World_StartRecording( b3WorldId worldId, b3Recording* recording )
 {
 	// Must be a step boundary, so refuse a locked world
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 
-	if ( world == NULL || recording == NULL || world->recording != NULL )
+	if ( world == NULL )
 	{
 		return;
 	}
 
+	if ( recording == NULL || world->recording != NULL )
+	{
+		b3WorldUnlockForRead( world );
+		return;
+	}
+
 	b3StartRecordingIntoBuffer( world, recording );
+	b3WorldUnlockForRead( world );
 }
 
 void b3World_StopRecording( b3WorldId worldId )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
 	}
 
 	b3StopRecordingInternal( world );
+	b3WorldUnlockForRead( world );
 }
 
 static uint64_t b3GetWorldByteCount( b3World* world, bool log )
@@ -2609,18 +2772,19 @@ static uint64_t b3GetWorldByteCount( b3World* world, bool log )
 
 void b3World_DumpMemoryStats( b3WorldId worldId )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
 	}
 
 	b3GetWorldByteCount( world, true );
+	b3WorldUnlockForRead( world );
 }
 
 b3Counters b3World_GetCounters( b3WorldId worldId )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3Counters){ 0 };
@@ -2679,6 +2843,8 @@ b3Counters b3World_GetCounters( b3WorldId worldId )
 		}
 	}
 
+	b3WorldUnlockForRead( world );
+
 	return s;
 }
 
@@ -2717,7 +2883,7 @@ b3TreeStats b3World_OverlapAABB( b3WorldId worldId, b3AABB aabb, b3QueryFilter f
 {
 	b3TreeStats treeStats = { 0 };
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return treeStats;
@@ -2756,6 +2922,7 @@ b3TreeStats b3World_OverlapAABB( b3WorldId worldId, b3AABB aabb, b3QueryFilter f
 		b3RecQueryCommit( world->recording, b3_recOpQueryOverlapAABB, &recWriter );
 	}
 
+	b3WorldUnlockForRead( world );
 	return treeStats;
 }
 
@@ -2818,7 +2985,7 @@ b3TreeStats b3World_OverlapShape( b3WorldId worldId, b3Pos origin, const b3Shape
 {
 	b3TreeStats treeStats = { 0 };
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return treeStats;
@@ -2862,6 +3029,7 @@ b3TreeStats b3World_OverlapShape( b3WorldId worldId, b3Pos origin, const b3Shape
 		b3RecQueryCommit( world->recording, b3_recOpQueryOverlapShape, &recWriter );
 	}
 
+	b3WorldUnlockForRead( world );
 	return treeStats;
 }
 
@@ -2930,7 +3098,7 @@ static bool TreeCollideCallback( int proxyId, uint64_t userData, void* context )
 void b3World_CollideMover( b3WorldId worldId, b3Pos origin, const b3Capsule* mover, b3QueryFilter filter, b3PlaneResultFcn* fcn,
 						   void* context )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -2973,6 +3141,7 @@ void b3World_CollideMover( b3WorldId worldId, b3Pos origin, const b3Capsule* mov
 		b3RecPatchU32( &recWriter.buf, recWriter.countOffset, recWriter.hitCount );
 		b3RecQueryCommit( world->recording, b3_recOpQueryCollideMover, &recWriter );
 	}
+	b3WorldUnlockForRead( world );
 }
 
 typedef struct WorldRayCastContext
@@ -3041,7 +3210,7 @@ b3TreeStats b3World_CastRay( b3WorldId worldId, b3Pos origin, b3Vec3 translation
 {
 	b3TreeStats treeStats = { 0 };
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return treeStats;
@@ -3092,6 +3261,7 @@ b3TreeStats b3World_CastRay( b3WorldId worldId, b3Pos origin, b3Vec3 translation
 		b3RecQueryCommit( world->recording, b3_recOpQueryCastRay, &recWriter );
 	}
 
+	b3WorldUnlockForRead( world );
 	return treeStats;
 }
 
@@ -3135,7 +3305,7 @@ b3RayResult b3World_CastRayClosest( b3WorldId worldId, b3Pos origin, b3Vec3 tran
 {
 	b3RayResult result = { 0 };
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return result;
@@ -3183,7 +3353,7 @@ b3RayResult b3World_CastRayClosest( b3WorldId worldId, b3Pos origin, b3Vec3 tran
 		b3RecW_RAYRESULT( &recWriter.buf, result );
 		b3RecQueryCommit( world->recording, b3_recOpQueryCastRayClosest, &recWriter );
 	}
-
+	b3WorldUnlockForRead( world );
 	return result;
 }
 
@@ -3255,7 +3425,7 @@ b3TreeStats b3World_CastShape( b3WorldId worldId, b3Pos origin, const b3ShapePro
 {
 	b3TreeStats treeStats = { 0 };
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return treeStats;
@@ -3319,6 +3489,7 @@ b3TreeStats b3World_CastShape( b3WorldId worldId, b3Pos origin, const b3ShapePro
 		b3RecQueryCommit( world->recording, b3_recOpQueryCastShape, &recWriter );
 	}
 
+	b3WorldUnlockForRead( world );
 	return treeStats;
 }
 
@@ -3412,7 +3583,7 @@ float b3World_CastMover( b3WorldId worldId, b3Pos origin, const b3Capsule* mover
 	B3_ASSERT( b3IsValidPosition( origin ) );
 	B3_ASSERT( b3IsValidVec3( translation ) );
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return 1.0f;
@@ -3475,29 +3646,32 @@ float b3World_CastMover( b3WorldId worldId, b3Pos origin, const b3Capsule* mover
 		b3RecQueryCommit( world->recording, b3_recOpQueryCastMover, &recWriter );
 	}
 
+	b3WorldUnlockForRead( world );
 	return worldContext.fraction;
 }
 
 void b3World_SetCustomFilterCallback( b3WorldId worldId, b3CustomFilterFcn* fcn, void* context )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
 	}
 	world->customFilterFcn = fcn;
 	world->customFilterContext = context;
+	b3WorldUnlockForRead( world );
 }
 
 void b3World_SetPreSolveCallback( b3WorldId worldId, b3PreSolveFcn* fcn, void* context )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
 	}
 	world->preSolveFcn = fcn;
 	world->preSolveContext = context;
+	b3WorldUnlockForRead( world );
 }
 
 void b3World_SetGravity( b3WorldId worldId, b3Vec3 gravity )
@@ -3623,7 +3797,8 @@ void b3World_Explode( b3WorldId worldId, const b3ExplosionDef* explosionDef )
 	B3_ASSERT( b3IsValidFloat( falloff ) && falloff >= 0.0f );
 	B3_ASSERT( b3IsValidFloat( impulsePerArea ) );
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	// Locked due to waking
+	b3World* world = b3GetWorldForWriteFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -3631,8 +3806,7 @@ void b3World_Explode( b3WorldId worldId, const b3ExplosionDef* explosionDef )
 
 	B3_REC( world, WorldExplode, worldId, *explosionDef );
 
-	// Locked due to waking
-	world->locked = true;
+	
 
 	struct ExplosionContext explosionContext = { world, position, radius, falloff, impulsePerArea };
 
@@ -3643,12 +3817,12 @@ void b3World_Explode( b3WorldId worldId, const b3ExplosionDef* explosionDef )
 
 	b3DynamicTree_Query( world->broadPhase.trees + b3_dynamicBody, aabb, maskBits, false, ExplosionCallback, &explosionContext );
 
-	world->locked = false;
+	b3WorldUnlockForWrite( world );
 }
 
 void b3World_RebuildStaticTree( b3WorldId worldId )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -3658,11 +3832,12 @@ void b3World_RebuildStaticTree( b3WorldId worldId )
 
 	b3DynamicTree* staticTree = world->broadPhase.trees + b3_staticBody;
 	b3DynamicTree_Rebuild( staticTree, true );
+	b3WorldUnlockForRead( world );
 }
 
 void b3World_EnableSpeculative( b3WorldId worldId, bool flag )
 {
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return;
@@ -3671,6 +3846,7 @@ void b3World_EnableSpeculative( b3WorldId worldId, bool flag )
 	B3_REC( world, WorldEnableSpeculative, worldId, flag );
 
 	world->enableSpeculative = flag;
+	b3WorldUnlockForRead( world );
 }
 
 #if B3_ENABLE_VALIDATION

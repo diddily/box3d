@@ -258,7 +258,7 @@ static b3ShapeId b3CreateShape( b3BodyId bodyId, const b3ShapeDef* def, const vo
 	B3_ASSERT( b3IsValidFloat( def->baseMaterial.friction ) && def->baseMaterial.friction >= 0.0f );
 	B3_ASSERT( b3IsValidFloat( def->baseMaterial.restitution ) && def->baseMaterial.restitution >= 0.0f );
 
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForWrite( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return (b3ShapeId){ 0 };
@@ -267,6 +267,7 @@ static b3ShapeId b3CreateShape( b3BodyId bodyId, const b3ShapeDef* def, const vo
 	if ( world->shapes.count == B3_MAX_SHAPES && world->shapeIdPool.freeArray.count == 0 )
 	{
 		B3_ASSERT( false );
+		b3WorldUnlockForWrite( world );
 		return b3_nullShapeId;
 	}
 
@@ -274,10 +275,9 @@ static b3ShapeId b3CreateShape( b3BodyId bodyId, const b3ShapeDef* def, const vo
 	if ( body->type != b3_staticBody && ( shapeType == b3_compoundShape || shapeType == b3_heightShape ) )
 	{
 		// Compound and height shapes must be on static bodies.
+		b3WorldUnlockForWrite( world );
 		return b3_nullShapeId;
 	}
-
-	world->locked = true;
 
 	b3WorldTransform bodyTransform = b3GetBodyTransformQuick( world, body );
 
@@ -286,7 +286,7 @@ static b3ShapeId b3CreateShape( b3BodyId bodyId, const b3ShapeDef* def, const vo
 
 	if ( shape == NULL )
 	{
-		world->locked = false;
+		b3WorldUnlockForWrite( world );
 		return b3_nullShapeId;
 	}
 
@@ -304,7 +304,7 @@ static b3ShapeId b3CreateShape( b3BodyId bodyId, const b3ShapeDef* def, const vo
 
 	b3ShapeId id = { shape->id + 1, bodyId.world0, shape->generation };
 
-	world->locked = false;
+	b3WorldUnlockForWrite( world );
 
 	return id;
 }
@@ -314,10 +314,11 @@ b3ShapeId b3CreateSphereShape( b3BodyId bodyId, const b3ShapeDef* def, const b3S
 	b3ShapeId shapeId = b3CreateShape( bodyId, def, sphere, b3_sphereShape, b3Transform_identity, b3Vec3_one, false );
 	if ( shapeId.index1 != 0 )
 	{
-		b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+		b3World* world = b3GetWorldForRead( bodyId.world0 );
 		if ( world != NULL )
 		{
 			B3_REC_CREATE( world, CreateSphereShape, shapeId, bodyId, *def, *sphere );
+			b3WorldUnlockForRead( world );
 		}
 	}
 	return shapeId;
@@ -338,10 +339,11 @@ b3ShapeId b3CreateCapsuleShape( b3BodyId bodyId, const b3ShapeDef* def, const b3
 	}
 	if ( shapeId.index1 != 0 )
 	{
-		b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+		b3World* world = b3GetWorldForRead( bodyId.world0 );
 		if ( world != NULL )
 		{
 			B3_REC_CREATE( world, CreateCapsuleShape, shapeId, bodyId, *def, *capsule );
+			b3WorldUnlockForRead( world );
 		}
 	}
 	return shapeId;
@@ -361,12 +363,16 @@ b3ShapeId b3CreateHullShape( b3BodyId bodyId, const b3ShapeDef* def, const b3Hul
 	b3ShapeId shapeId = b3CreateShape( bodyId, def, hull, b3_hullShape, b3Transform_identity, b3Vec3_one, false );
 	if ( shapeId.index1 != 0 )
 	{
-		b3World* world = b3GetUnlockedWorld( bodyId.world0 );
-		if ( world != NULL && world->recording != NULL )
+		b3World* world = b3GetWorldForRead( bodyId.world0 );
+		if ( world != NULL )
 		{
-			uint32_t geometryId = b3RecInternHull( world->recording, hull );
-			b3RecArgs_CreateHullShape createArgs = { bodyId, *def, geometryId };
-			b3RecWriteRet_CreateHullShape( world->recording, &createArgs, shapeId );
+			if ( world->recording != NULL )
+			{
+				uint32_t geometryId = b3RecInternHull( world->recording, hull );
+				b3RecArgs_CreateHullShape createArgs = { bodyId, *def, geometryId };
+				b3RecWriteRet_CreateHullShape( world->recording, &createArgs, shapeId );
+			}
+			b3WorldUnlockForRead( world );
 		}
 	}
 	return shapeId;
@@ -387,16 +393,20 @@ b3ShapeId b3CreateTransformedHullShape( b3BodyId bodyId, const b3ShapeDef* def, 
 	b3ShapeId shapeId = b3CreateShape( bodyId, def, hull, b3_hullShape, transform, scale, true );
 	if ( shapeId.index1 != 0 )
 	{
-		b3World* world = b3GetUnlockedWorld( bodyId.world0 );
-		if ( world != NULL && world->recording != NULL )
+		b3World* world = b3GetWorldForRead( bodyId.world0 );
+		if ( world != NULL )
 		{
-			// The transform and scale are baked into fresh hull data at create time. Record the baked hull
-			// as a plain hull shape so replay rebuilds identical geometry with no rebake, and the keyframe
-			// registry, which interns the live baked hull, stays seeded.
-			b3Shape* shape = b3Array_Get( world->shapes, shapeId.index1 - 1 );
-			uint32_t geometryId = b3RecInternHull( world->recording, shape->hull );
-			b3RecArgs_CreateHullShape createArgs = { bodyId, *def, geometryId };
-			b3RecWriteRet_CreateHullShape( world->recording, &createArgs, shapeId );
+			if ( world->recording != NULL )
+			{
+				// The transform and scale are baked into fresh hull data at create time. Record the baked hull
+				// as a plain hull shape so replay rebuilds identical geometry with no rebake, and the keyframe
+				// registry, which interns the live baked hull, stays seeded.
+				b3Shape* shape = b3Array_Get( world->shapes, shapeId.index1 - 1 );
+				uint32_t geometryId = b3RecInternHull( world->recording, shape->hull );
+				b3RecArgs_CreateHullShape createArgs = { bodyId, *def, geometryId };
+				b3RecWriteRet_CreateHullShape( world->recording, &createArgs, shapeId );
+			}
+			b3WorldUnlockForRead( world );
 		}
 	}
 	return shapeId;
@@ -416,12 +426,16 @@ b3ShapeId b3CreateMeshShape( b3BodyId bodyId, const b3ShapeDef* def, const b3Mes
 	b3ShapeId shapeId = b3CreateShape( bodyId, def, mesh, b3_meshShape, b3Transform_identity, scale, true );
 	if ( shapeId.index1 != 0 )
 	{
-		b3World* world = b3GetUnlockedWorld( bodyId.world0 );
-		if ( world != NULL && world->recording != NULL )
+		b3World* world = b3GetWorldForRead( bodyId.world0 );
+		if ( world != NULL )
 		{
-			uint32_t geometryId = b3RecInternMesh( world->recording, mesh );
-			b3RecArgs_CreateMeshShape createArgs = { bodyId, *def, geometryId, scale };
-			b3RecWriteRet_CreateMeshShape( world->recording, &createArgs, shapeId );
+			if ( world->recording != NULL )
+			{
+				uint32_t geometryId = b3RecInternMesh( world->recording, mesh );
+				b3RecArgs_CreateMeshShape createArgs = { bodyId, *def, geometryId, scale };
+				b3RecWriteRet_CreateMeshShape( world->recording, &createArgs, shapeId );
+			}
+			b3WorldUnlockForRead( world );
 		}
 	}
 	return shapeId;
@@ -440,12 +454,16 @@ b3ShapeId b3CreateHeightFieldShape( b3BodyId bodyId, const b3ShapeDef* def, cons
 	b3ShapeId shapeId = b3CreateShape( bodyId, def, heightField, b3_heightShape, b3Transform_identity, b3Vec3_one, false );
 	if ( shapeId.index1 != 0 )
 	{
-		b3World* world = b3GetUnlockedWorld( bodyId.world0 );
-		if ( world != NULL && world->recording != NULL )
+		b3World* world = b3GetWorldForRead( bodyId.world0 );
+		if ( world != NULL )
 		{
-			uint32_t geometryId = b3RecInternHeightField( world->recording, heightField );
-			b3RecArgs_CreateHeightFieldShape createArgs = { bodyId, *def, geometryId };
-			b3RecWriteRet_CreateHeightFieldShape( world->recording, &createArgs, shapeId );
+			if (world->recording != NULL)
+			{
+				uint32_t geometryId = b3RecInternHeightField( world->recording, heightField );
+				b3RecArgs_CreateHeightFieldShape createArgs = { bodyId, *def, geometryId };
+				b3RecWriteRet_CreateHeightFieldShape( world->recording, &createArgs, shapeId );
+			}
+			b3WorldUnlockForRead( world );
 		}
 	}
 	return shapeId;
@@ -463,12 +481,16 @@ b3ShapeId b3CreateBakedCompoundShape( b3BodyId bodyId, b3ShapeDef* def, const b3
 	b3ShapeId shapeId = b3CreateShape( bodyId, def, compound, b3_compoundShape, b3Transform_identity, b3Vec3_one, false );
 	if ( shapeId.index1 != 0 )
 	{
-		b3World* world = b3GetUnlockedWorld( bodyId.world0 );
-		if ( world != NULL && world->recording != NULL )
+		b3World* world = b3GetWorldForRead( bodyId.world0 );
+		if ( world != NULL )
 		{
-			uint32_t geometryId = b3RecInternCompound( world->recording, compound );
-			b3RecArgs_CreateCompoundShape createArgs = { bodyId, *def, geometryId };
-			b3RecWriteRet_CreateCompoundShape( world->recording, &createArgs, shapeId );
+			if ( world->recording != NULL )
+			{
+				uint32_t geometryId = b3RecInternCompound( world->recording, compound );
+				b3RecArgs_CreateCompoundShape createArgs = { bodyId, *def, geometryId };
+				b3RecWriteRet_CreateCompoundShape( world->recording, &createArgs, shapeId );
+			}
+			b3WorldUnlockForRead( world );
 		}
 	}
 	return shapeId;
@@ -575,15 +597,13 @@ static void b3DestroyShapeInternal( b3World* world, b3Shape* shape, b3Body* body
 
 void b3DestroyShape( b3ShapeId shapeId, bool updateBodyMass )
 {
-	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	b3World* world = b3GetWorldForWrite( shapeId.world0 );
 	if ( world == NULL )
 	{
 		return;
 	}
 
 	B3_REC( world, DestroyShape, shapeId, updateBodyMass );
-
-	world->locked = true;
 
 	b3Shape* shape = b3GetShape( world, shapeId );
 
@@ -597,8 +617,8 @@ void b3DestroyShape( b3ShapeId shapeId, bool updateBodyMass )
 	{
 		b3UpdateBodyMassData( world, body );
 	}
-
-	world->locked = false;
+	
+	b3WorldUnlockForWrite( world );
 }
 
 b3AABB b3ComputeShapeAABB( const b3Shape* shape, b3Transform transform )
@@ -1224,7 +1244,7 @@ void b3Shape_SetDensity( b3ShapeId shapeId, float density, bool updateBodyMass )
 {
 	B3_ASSERT( b3IsValidFloat( density ) && density >= 0.0f );
 
-	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	b3World* world = b3GetWorldForRead( shapeId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -1236,6 +1256,7 @@ void b3Shape_SetDensity( b3ShapeId shapeId, float density, bool updateBodyMass )
 	if ( density == shape->density )
 	{
 		// early return to avoid expensive function
+		b3WorldUnlockForRead( world );
 		return;
 	}
 
@@ -1246,6 +1267,8 @@ void b3Shape_SetDensity( b3ShapeId shapeId, float density, bool updateBodyMass )
 		b3Body* body = b3Array_Get( world->bodies, shape->bodyId );
 		b3UpdateBodyMassData( world, body );
 	}
+
+	b3WorldUnlockForRead( world );
 }
 
 float b3Shape_GetDensity( b3ShapeId shapeId )
@@ -1402,7 +1425,7 @@ static void b3ResetProxy( b3World* world, b3Shape* shape, bool wakeBodies, bool 
 
 void b3Shape_SetFilter( b3ShapeId shapeId, b3Filter filter, bool invokeContacts )
 {
-	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	b3World* world = b3GetWorldForRead( shapeId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -1414,6 +1437,7 @@ void b3Shape_SetFilter( b3ShapeId shapeId, b3Filter filter, bool invokeContacts 
 	if ( filter.maskBits == shape->filter.maskBits && filter.categoryBits == shape->filter.categoryBits &&
 		 filter.groupIndex == shape->filter.groupIndex )
 	{
+		b3WorldUnlockForRead( world );
 		return;
 	}
 
@@ -1421,7 +1445,7 @@ void b3Shape_SetFilter( b3ShapeId shapeId, b3Filter filter, bool invokeContacts 
 
 	if ( invokeContacts )
 	{
-		world->locked = true;
+		b3ConvertWorldReadToWrite( world );
 		bool wakeBodies = true;
 
 		// If the category bits change, I need to destroy the proxy because it affects the tree sorting.
@@ -1430,6 +1454,11 @@ void b3Shape_SetFilter( b3ShapeId shapeId, b3Filter filter, bool invokeContacts 
 		// need to wake bodies because a filter change may destroy contacts
 		b3ResetProxy( world, shape, wakeBodies, destroyProxy );
 		world->locked = false;
+		b3WorldUnlockForWrite( world );
+	}
+	else
+	{
+		b3WorldUnlockForRead( world );
 	}
 
 	// note: this does not immediately update sensor overlaps. Instead sensor
@@ -1438,7 +1467,7 @@ void b3Shape_SetFilter( b3ShapeId shapeId, b3Filter filter, bool invokeContacts 
 
 void b3Shape_EnableSensorEvents( b3ShapeId shapeId, bool flag )
 {
-	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	b3World* world = b3GetWorldForRead( shapeId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -1448,6 +1477,7 @@ void b3Shape_EnableSensorEvents( b3ShapeId shapeId, bool flag )
 
 	b3Shape* shape = b3GetShape( world, shapeId );
 	shape->flags = flag ? shape->flags | b3_enableSensorEvents : shape->flags & ~b3_enableSensorEvents;
+	b3WorldUnlockForRead( world );
 }
 
 bool b3Shape_AreSensorEventsEnabled( b3ShapeId shapeId )
@@ -1459,7 +1489,7 @@ bool b3Shape_AreSensorEventsEnabled( b3ShapeId shapeId )
 
 void b3Shape_EnableContactEvents( b3ShapeId shapeId, bool flag )
 {
-	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	b3World* world = b3GetWorldForRead( shapeId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -1469,6 +1499,7 @@ void b3Shape_EnableContactEvents( b3ShapeId shapeId, bool flag )
 
 	b3Shape* shape = b3GetShape( world, shapeId );
 	shape->flags = flag ? shape->flags | b3_enableContactEvents : shape->flags & ~b3_enableContactEvents;
+	b3WorldUnlockForRead( world );
 }
 
 bool b3Shape_AreContactEventsEnabled( b3ShapeId shapeId )
@@ -1480,7 +1511,7 @@ bool b3Shape_AreContactEventsEnabled( b3ShapeId shapeId )
 
 void b3Shape_EnablePreSolveEvents( b3ShapeId shapeId, bool flag )
 {
-	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	b3World* world = b3GetWorldForRead( shapeId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -1490,6 +1521,7 @@ void b3Shape_EnablePreSolveEvents( b3ShapeId shapeId, bool flag )
 
 	b3Shape* shape = b3GetShape( world, shapeId );
 	shape->flags = flag ? shape->flags | b3_enablePreSolveEvents : shape->flags & ~b3_enablePreSolveEvents;
+	b3WorldUnlockForRead( world );
 }
 
 bool b3Shape_ArePreSolveEventsEnabled( b3ShapeId shapeId )
@@ -1501,7 +1533,7 @@ bool b3Shape_ArePreSolveEventsEnabled( b3ShapeId shapeId )
 
 void b3Shape_EnableHitEvents( b3ShapeId shapeId, bool flag )
 {
-	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	b3World* world = b3GetWorldForRead( shapeId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -1511,6 +1543,7 @@ void b3Shape_EnableHitEvents( b3ShapeId shapeId, bool flag )
 
 	b3Shape* shape = b3GetShape( world, shapeId );
 	shape->flags = flag ? shape->flags | b3_enableHitEvents : shape->flags & ~b3_enableHitEvents;
+	b3WorldUnlockForRead( world );
 }
 
 bool b3Shape_AreHitEventsEnabled( b3ShapeId shapeId )
@@ -1577,15 +1610,13 @@ const b3CompoundData* b3Shape_GetCompound( b3ShapeId shapeId )
 
 void b3Shape_SetSphere( b3ShapeId shapeId, const b3Sphere* sphere )
 {
-	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	b3World* world = b3GetWorldForWrite( shapeId.world0 );
 	if ( world == NULL )
 	{
 		return;
 	}
 
 	B3_REC( world, ShapeSetSphere, shapeId, *sphere );
-
-	world->locked = true;
 
 	b3Shape* shape = b3GetShape( world, shapeId );
 
@@ -1600,20 +1631,18 @@ void b3Shape_SetSphere( b3ShapeId shapeId, const b3Sphere* sphere )
 	bool destroyProxy = true;
 	b3ResetProxy( world, shape, wakeBodies, destroyProxy );
 
-	world->locked = false;
+	b3WorldUnlockForWrite( world );
 }
 
 void b3Shape_SetCapsule( b3ShapeId shapeId, const b3Capsule* capsule )
 {
-	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	b3World* world = b3GetWorldForWrite( shapeId.world0 );
 	if ( world == NULL )
 	{
 		return;
 	}
 
 	B3_REC( world, ShapeSetCapsule, shapeId, *capsule );
-
-	world->locked = true;
 
 	b3Shape* shape = b3GetShape( world, shapeId );
 
@@ -1628,7 +1657,7 @@ void b3Shape_SetCapsule( b3ShapeId shapeId, const b3Capsule* capsule )
 	bool destroyProxy = true;
 	b3ResetProxy( world, shape, wakeBodies, destroyProxy );
 
-	world->locked = false;
+	b3WorldUnlockForWrite( world );
 }
 
 void b3Shape_SetHull( b3ShapeId shapeId, const b3HullData* hull )
@@ -1636,13 +1665,11 @@ void b3Shape_SetHull( b3ShapeId shapeId, const b3HullData* hull )
 	B3_VALIDATE( b3IsValidHull( hull ) );
 	B3_VALIDATE( hull->hash != 0 );
 
-	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	b3World* world = b3GetWorldForWrite( shapeId.world0 );
 	if ( world == NULL )
 	{
 		return;
 	}
-
-	world->locked = true;
 
 	b3Shape* shape = b3GetShape( world, shapeId );
 
@@ -1654,7 +1681,7 @@ void b3Shape_SetHull( b3ShapeId shapeId, const b3HullData* hull )
 	if ( shape->type == b3_hullShape && data == shape->hull )
 	{
 		b3RemoveHullFromDatabase( world, data );
-		world->locked = false;
+		b3WorldUnlockForWrite( world );
 		return;
 	}
 
@@ -1677,7 +1704,7 @@ void b3Shape_SetHull( b3ShapeId shapeId, const b3HullData* hull )
 	bool destroyProxy = true;
 	b3ResetProxy( world, shape, wakeBodies, destroyProxy );
 
-	world->locked = false;
+	b3WorldUnlockForWrite( world );
 }
 
 void b3Shape_SetMesh( b3ShapeId shapeId, const b3MeshData* meshData, b3Vec3 scale )
@@ -1685,13 +1712,11 @@ void b3Shape_SetMesh( b3ShapeId shapeId, const b3MeshData* meshData, b3Vec3 scal
 	B3_ASSERT( b3IsValidVec3( scale ) );
 	B3_ASSERT( meshData != NULL && b3IsValidMesh( meshData ) );
 
-	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	b3World* world = b3GetWorldForWrite( shapeId.world0 );
 	if ( world == NULL )
 	{
 		return;
 	}
-
-	world->locked = true;
 
 	if ( world->recording != NULL )
 	{
@@ -1714,12 +1739,12 @@ void b3Shape_SetMesh( b3ShapeId shapeId, const b3MeshData* meshData, b3Vec3 scal
 	bool destroyProxy = true;
 	b3ResetProxy( world, shape, wakeBodies, destroyProxy );
 
-	world->locked = false;
+	b3WorldUnlockForWrite( world );
 }
 
 int b3Shape_GetContactCapacity( b3ShapeId shapeId )
 {
-	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	b3World* world = b3GetWorldForRead( shapeId.world0 );
 	if ( world == NULL )
 	{
 		return 0;
@@ -1728,6 +1753,7 @@ int b3Shape_GetContactCapacity( b3ShapeId shapeId )
 	b3Shape* shape = b3GetShape( world, shapeId );
 	if ( shape->sensorIndex != B3_NULL_INDEX )
 	{
+		b3WorldUnlockForRead( world );
 		return 0;
 	}
 
@@ -1739,7 +1765,7 @@ int b3Shape_GetContactCapacity( b3ShapeId shapeId )
 
 int b3Shape_GetContactData( b3ShapeId shapeId, b3ContactData* contactData, int capacity )
 {
-	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	b3World* world = b3GetWorldForRead( shapeId.world0 );
 	if ( world == NULL )
 	{
 		return 0;
@@ -1748,6 +1774,7 @@ int b3Shape_GetContactData( b3ShapeId shapeId, b3ContactData* contactData, int c
 	b3Shape* shape = b3GetShape( world, shapeId );
 	if ( shape->sensorIndex != B3_NULL_INDEX )
 	{
+		b3WorldUnlockForRead( world );
 		return 0;
 	}
 
@@ -1781,12 +1808,14 @@ int b3Shape_GetContactData( b3ShapeId shapeId, b3ContactData* contactData, int c
 
 	B3_ASSERT( index <= capacity );
 
+	b3WorldUnlockForRead( world );
+
 	return index;
 }
 
 int b3Shape_GetSensorCapacity( b3ShapeId shapeId )
 {
-	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	b3World* world = b3GetWorldForRead( shapeId.world0 );
 	if ( world == NULL )
 	{
 		return 0;
@@ -1795,16 +1824,18 @@ int b3Shape_GetSensorCapacity( b3ShapeId shapeId )
 	b3Shape* shape = b3GetShape( world, shapeId );
 	if ( shape->sensorIndex == B3_NULL_INDEX )
 	{
+		b3WorldUnlockForRead( world );
 		return 0;
 	}
 
 	b3Sensor* sensor = b3Array_Get( world->sensors, shape->sensorIndex );
+	b3WorldUnlockForRead( world );
 	return sensor->overlaps2.count;
 }
 
 int b3Shape_GetSensorData( b3ShapeId shapeId, b3ShapeId* visitorIds, int capacity )
 {
-	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
+	b3World* world = b3GetWorldForRead( shapeId.world0 );
 	if ( world == NULL )
 	{
 		return 0;
@@ -1813,6 +1844,7 @@ int b3Shape_GetSensorData( b3ShapeId shapeId, b3ShapeId* visitorIds, int capacit
 	b3Shape* shape = b3GetShape( world, shapeId );
 	if ( shape->sensorIndex == B3_NULL_INDEX )
 	{
+		b3WorldUnlockForRead( world );
 		return 0;
 	}
 
@@ -1830,6 +1862,8 @@ int b3Shape_GetSensorData( b3ShapeId shapeId, b3ShapeId* visitorIds, int capacit
 
 		visitorIds[i] = visitorId;
 	}
+
+	b3WorldUnlockForRead( world );
 
 	return count;
 }

@@ -52,6 +52,8 @@ typedef struct b3DebugShape b3DebugShape;
 typedef void* b3CreateDebugShapeCallback( const b3DebugShape* debugShape, void* userContext );
 typedef void b3DestroyDebugShapeCallback( void* userShape, void* userContext );
 
+typedef void b3WorldLockingCallback( void* userContext );
+
 /// Optional friction mixing callback. This intentionally provides no context objects because this
 /// is called from a worker thread.
 /// @warning This function should not attempt to modify Box3D state or user application state.
@@ -227,6 +229,14 @@ typedef struct b3WorldDef
 
 	/// This is passed to the debug shape callbacks to provide a user context.
 	void* userDebugShapeContext;
+
+	b3WorldLockingCallback* lockForRead;
+	b3WorldLockingCallback* lockForWrite;
+	b3WorldLockingCallback* unlockForRead;
+	b3WorldLockingCallback* unlockForWrite;
+	b3WorldLockingCallback* convertReadToWrite;
+	b3WorldLockingCallback* convertWriteToRead;
+	void* lockContext;
 
 	/// Optional initial capacities
 	b3Capacity capacity;

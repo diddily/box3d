@@ -81,7 +81,7 @@ float b3DistanceJoint_GetCurrentLength( b3JointId jointId )
 {
 	b3JointSim* base = b3GetJointSimCheckType( jointId, b3_distanceJoint );
 
-	b3World* world = b3GetUnlockedWorld( jointId.world0 );
+	b3World* world = b3GetWorldForRead( jointId.world0 );
 	if ( world == NULL )
 	{
 		return 0.0f;
@@ -94,6 +94,7 @@ float b3DistanceJoint_GetCurrentLength( b3JointId jointId )
 	b3Pos pB = b3TransformWorldPoint( transformB, base->localFrameB.p );
 	b3Vec3 d = b3SubPos( pB, pA );
 	float length = b3Length( d );
+	b3WorldUnlockForRead( world );
 	return length;
 }
 

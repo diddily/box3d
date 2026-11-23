@@ -462,7 +462,7 @@ float b3Joint_GetTorqueThreshold( b3JointId jointId )
 b3JointId b3CreateDistanceJoint( b3WorldId worldId, const b3DistanceJointDef* def )
 {
 	B3_CHECK_JOINT_DEF( def );
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3JointId){ 0 };
@@ -495,13 +495,14 @@ b3JointId b3CreateDistanceJoint( b3WorldId worldId, const b3DistanceJointDef* de
 
 	b3JointId jointId = { joint->jointId + 1, world->worldId, pair.joint->generation };
 	B3_REC_CREATE( world, CreateDistanceJoint, jointId, worldId, *def );
+	b3WorldUnlockForRead( world );
 	return jointId;
 }
 
 b3JointId b3CreateMotorJoint( b3WorldId worldId, const b3MotorJointDef* def )
 {
 	B3_CHECK_JOINT_DEF( def );
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3JointId){ 0 };
@@ -524,6 +525,7 @@ b3JointId b3CreateMotorJoint( b3WorldId worldId, const b3MotorJointDef* def )
 
 	b3JointId jointId = { joint->jointId + 1, world->worldId, pair.joint->generation };
 	B3_REC_CREATE( world, CreateMotorJoint, jointId, worldId, *def );
+	b3WorldUnlockForRead( world );
 	return jointId;
 }
 
@@ -533,7 +535,7 @@ b3JointId b3CreateMoverJoint( b3WorldId worldId, const b3MoverJointDef* def )
 	B3_ASSERT( b3IsValidVec3( def->linearVelocity ) );
 	B3_ASSERT( b3IsValidFloat( def->maxForce ) && def->maxForce >= 0.0f );
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3JointId){ 0 };
@@ -548,6 +550,7 @@ b3JointId b3CreateMoverJoint( b3WorldId worldId, const b3MoverJointDef* def )
 
 	b3JointId jointId = { joint->jointId + 1, world->worldId, pair.joint->generation };
 	B3_REC_CREATE( world, CreateMoverJoint, jointId, worldId, *def );
+	b3WorldUnlockForRead( world );
 	return jointId;
 }
 
@@ -563,7 +566,7 @@ b3JointId b3CreatePogoJoint( b3WorldId worldId, const b3PogoJointDef* def )
 	B3_ASSERT( b3IsValidFloat( def->impulse ) );
 	B3_ASSERT( b3IsValidFloat( def->velocity ) );
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3JointId){ 0 };
@@ -584,13 +587,14 @@ b3JointId b3CreatePogoJoint( b3WorldId worldId, const b3PogoJointDef* def )
 
 	b3JointId jointId = { joint->jointId + 1, world->worldId, pair.joint->generation };
 	B3_REC_CREATE( world, CreatePogoJoint, jointId, worldId, *def );
+	b3WorldUnlockForRead( world );
 	return jointId;
 }
 
 b3JointId b3CreateFilterJoint( b3WorldId worldId, const b3FilterJointDef* def )
 {
 	B3_CHECK_JOINT_DEF( def );
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3JointId){ 0 };
@@ -602,13 +606,14 @@ b3JointId b3CreateFilterJoint( b3WorldId worldId, const b3FilterJointDef* def )
 
 	b3JointId jointId = { joint->jointId + 1, world->worldId, pair.joint->generation };
 	B3_REC_CREATE( world, CreateFilterJoint, jointId, worldId, *def );
+	b3WorldUnlockForRead( world );
 	return jointId;
 }
 
 b3JointId b3CreateParallelJoint( b3WorldId worldId, const b3ParallelJointDef* def )
 {
 	B3_CHECK_JOINT_DEF( def );
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3JointId){ 0 };
@@ -629,6 +634,7 @@ b3JointId b3CreateParallelJoint( b3WorldId worldId, const b3ParallelJointDef* de
 
 	b3JointId jointId = { joint->jointId + 1, world->worldId, pair.joint->generation };
 	B3_REC_CREATE( world, CreateParallelJoint, jointId, worldId, *def );
+	b3WorldUnlockForRead( world );
 	return jointId;
 }
 
@@ -637,7 +643,7 @@ b3JointId b3CreatePrismaticJoint( b3WorldId worldId, const b3PrismaticJointDef* 
 	B3_CHECK_JOINT_DEF( def );
 	B3_ASSERT( def->lowerTranslation <= def->upperTranslation );
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3JointId){ 0 };
@@ -661,6 +667,7 @@ b3JointId b3CreatePrismaticJoint( b3WorldId worldId, const b3PrismaticJointDef* 
 
 	b3JointId jointId = { joint->jointId + 1, world->worldId, pair.joint->generation };
 	B3_REC_CREATE( world, CreatePrismaticJoint, jointId, worldId, *def );
+	b3WorldUnlockForRead( world );
 	return jointId;
 }
 
@@ -668,7 +675,7 @@ b3JointId b3CreateRevoluteJoint( b3WorldId worldId, const b3RevoluteJointDef* de
 {
 	B3_CHECK_JOINT_DEF( def );
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3JointId){ 0 };
@@ -696,6 +703,7 @@ b3JointId b3CreateRevoluteJoint( b3WorldId worldId, const b3RevoluteJointDef* de
 
 	b3JointId jointId = { joint->jointId + 1, world->worldId, pair.joint->generation };
 	B3_REC_CREATE( world, CreateRevoluteJoint, jointId, worldId, *def );
+	b3WorldUnlockForRead( world );
 	return jointId;
 }
 
@@ -705,7 +713,7 @@ b3JointId b3CreateSphericalJoint( b3WorldId worldId, const b3SphericalJointDef* 
 	B3_ASSERT( 0.0f <= def->coneAngle && def->coneAngle <= 0.99f * B3_PI );
 	B3_ASSERT( b3IsValidQuat( def->targetRotation ) );
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3JointId){ 0 };
@@ -737,6 +745,7 @@ b3JointId b3CreateSphericalJoint( b3WorldId worldId, const b3SphericalJointDef* 
 
 	b3JointId jointId = { joint->jointId + 1, world->worldId, pair.joint->generation };
 	B3_REC_CREATE( world, CreateSphericalJoint, jointId, worldId, *def );
+	b3WorldUnlockForRead( world );
 	return jointId;
 }
 
@@ -748,7 +757,7 @@ b3JointId b3CreateWeldJoint( b3WorldId worldId, const b3WeldJointDef* def )
 	B3_ASSERT( 0.0f <= def->linearHertz );
 	B3_ASSERT( 0.0f <= def->linearDampingRatio );
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3JointId){ 0 };
@@ -766,6 +775,7 @@ b3JointId b3CreateWeldJoint( b3WorldId worldId, const b3WeldJointDef* def )
 
 	b3JointId jointId = { joint->jointId + 1, world->worldId, pair.joint->generation };
 	B3_REC_CREATE( world, CreateWeldJoint, jointId, worldId, *def );
+	b3WorldUnlockForRead( world );
 	return jointId;
 }
 
@@ -774,7 +784,7 @@ b3JointId b3CreateWheelJoint( b3WorldId worldId, const b3WheelJointDef* def )
 	B3_CHECK_JOINT_DEF( def );
 	B3_ASSERT( def->lowerSuspensionLimit <= def->upperSuspensionLimit );
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForReadFromId( worldId );
 	if ( world == NULL )
 	{
 		return (b3JointId){ 0 };
@@ -806,6 +816,7 @@ b3JointId b3CreateWheelJoint( b3WorldId worldId, const b3WheelJointDef* def )
 
 	b3JointId jointId = { joint->jointId + 1, world->worldId, pair.joint->generation };
 	B3_REC_CREATE( world, CreateWheelJoint, jointId, worldId, *def );
+	b3WorldUnlockForRead( world );
 	return jointId;
 }
 
@@ -999,7 +1010,7 @@ b3Transform b3Joint_GetLocalFrameB( b3JointId jointId )
 
 void b3Joint_SetCollideConnected( b3JointId jointId, bool shouldCollide )
 {
-	b3World* world = b3GetUnlockedWorld( jointId.world0 );
+	b3World* world = b3GetWorldForRead( jointId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -1010,6 +1021,7 @@ void b3Joint_SetCollideConnected( b3JointId jointId, bool shouldCollide )
 	b3Joint* joint = b3GetJointFullId( world, jointId );
 	if ( joint->collideConnected == shouldCollide )
 	{
+		b3WorldUnlockForRead( world );
 		return;
 	}
 
@@ -1042,6 +1054,7 @@ void b3Joint_SetCollideConnected( b3JointId jointId, bool shouldCollide )
 	{
 		b3DestroyContactsBetweenBodies( world, bodyA, bodyB );
 	}
+	b3WorldUnlockForRead( world );
 }
 
 bool b3Joint_GetCollideConnected( b3JointId jointId )
@@ -1067,15 +1080,13 @@ void* b3Joint_GetUserData( b3JointId jointId )
 
 void b3Joint_WakeBodies( b3JointId jointId )
 {
-	b3World* world = b3GetUnlockedWorld( jointId.world0 );
+	b3World* world = b3GetWorldForWrite( jointId.world0 );
 	if ( world == NULL )
 	{
 		return;
 	}
 
 	B3_REC( world, JointWakeBodies, jointId );
-
-	world->locked = true;
 
 	b3Joint* joint = b3GetJointFullId( world, jointId );
 	b3Body* bodyA = b3Array_Get( world->bodies, joint->edges[0].bodyId );
@@ -1084,7 +1095,7 @@ void b3Joint_WakeBodies( b3JointId jointId )
 	b3WakeBody( world, bodyA );
 	b3WakeBody( world, bodyB );
 
-	world->locked = false;
+	b3WorldUnlockForWrite( world );
 }
 
 bool b3Joint_IsAwake( b3JointId jointId )

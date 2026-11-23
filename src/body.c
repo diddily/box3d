@@ -187,14 +187,12 @@ b3BodyId b3CreateBody( b3WorldId worldId, const b3BodyDef* def )
 	B3_ASSERT( b3IsValidFloat( def->safetyFactor ) && def->safetyFactor >= 0.0f );
 	B3_ASSERT( b3IsValidFloat( def->gravityScale ) );
 
-	b3World* world = b3GetUnlockedWorldFromId( worldId );
+	b3World* world = b3GetWorldForWriteFromId( worldId );
 
 	if ( world == NULL )
 	{
 		return b3_nullBodyId;
 	}
-
-	world->locked = true;
 
 	bool isAwake = ( def->isAwake || def->enableSleep == false ) && def->isEnabled;
 
@@ -324,7 +322,7 @@ b3BodyId b3CreateBody( b3WorldId worldId, const b3BodyDef* def )
 
 	b3BodyId id = { bodyId + 1, world->worldId, body->generation };
 
-	world->locked = false;
+	b3WorldUnlockForWrite( world );
 
 	B3_REC_CREATE( world, CreateBody, id, worldId, *def );
 
@@ -351,24 +349,21 @@ bool b3WakeBody( b3World* world, b3Body* body )
 
 bool b3WakeBodyWithLock( b3World* world, b3Body* body )
 {
-	B3_ASSERT( world->locked == false );
-	world->locked = true;
+	b3WorldLockForWrite( world );
 	bool woke = b3WakeBody( world, body );
-	world->locked = false;
+	b3WorldUnlockForWrite( world );
 	return woke;
 }
 
 void b3DestroyBody( b3BodyId bodyId )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForWrite( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
 	}
 
 	B3_REC( world, DestroyBody, bodyId );
-
-	world->locked = true;
 
 	b3Body* body = b3GetBodyFullId( world, bodyId );
 
@@ -458,26 +453,28 @@ void b3DestroyBody( b3BodyId bodyId )
 
 	b3ValidateSolverSets( world );
 
-	world->locked = false;
+	b3WorldUnlockForWrite( world );
 }
 
 int b3Body_GetContactCapacity( b3BodyId bodyId )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return 0;
 	}
 
 	b3Body* body = b3GetBodyFullId( world, bodyId );
-
 	// Conservative and fast
-	return body->contactCount;
+	int contactCount = body->contactCount;
+
+	b3WorldUnlockForRead( world );
+	return contactCount;
 }
 
 int b3Body_GetContactData( b3BodyId bodyId, b3ContactData* contactData, int capacity )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return 0;
@@ -513,12 +510,13 @@ int b3Body_GetContactData( b3BodyId bodyId, b3ContactData* contactData, int capa
 
 	B3_ASSERT( index <= capacity );
 
+	b3WorldUnlockForRead( world );
 	return index;
 }
 
 b3AABB b3Body_ComputeAABB( b3BodyId bodyId )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return (b3AABB){ 0 };
@@ -529,6 +527,7 @@ b3AABB b3Body_ComputeAABB( b3BodyId bodyId )
 	{
 		b3WorldTransform transform = b3GetBodyTransform( world, body->id );
 		b3Vec3 p = b3ToVec3( transform.p );
+		b3WorldUnlockForRead( world );
 		return (b3AABB){ p, p };
 	}
 
@@ -540,12 +539,14 @@ b3AABB b3Body_ComputeAABB( b3BodyId bodyId )
 		aabb = b3AABB_Union( aabb, shape->aabb );
 	}
 
+	b3WorldUnlockForRead( world );
+
 	return aabb;
 }
 
 float b3Body_GetClosestPoint( b3BodyId bodyId, b3Vec3* result, b3Vec3 target )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		*result = (b3Vec3){ 0 };
@@ -590,13 +591,14 @@ float b3Body_GetClosestPoint( b3BodyId bodyId, b3Vec3* result, b3Vec3 target )
 	}
 
 	*result = closestPoint;
+	b3WorldUnlockForRead( world );
 	return closestDistance;
 }
 
 b3BodyCastResult b3Body_CastRay( b3BodyId bodyId, b3Pos origin, b3Vec3 translation, b3QueryFilter filter, float maxFraction,
 								 b3WorldTransform bodyTransform )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return (b3BodyCastResult){ 0 };
@@ -656,13 +658,14 @@ b3BodyCastResult b3Body_CastRay( b3BodyId bodyId, b3Pos origin, b3Vec3 translati
 		shapeInput.maxFraction = shapeOutput.fraction;
 	}
 
+	b3WorldUnlockForRead( world );
 	return result;
 }
 
 b3BodyCastResult b3Body_CastShape( b3BodyId bodyId, b3Pos origin, const b3ShapeProxy* proxy, b3Vec3 translation,
 								   b3QueryFilter filter, float maxFraction, bool canEncroach, b3WorldTransform bodyTransform )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return (b3BodyCastResult){ 0 };
@@ -721,13 +724,14 @@ b3BodyCastResult b3Body_CastShape( b3BodyId bodyId, b3Pos origin, const b3ShapeP
 		shapeInput.maxFraction = shapeOutput.fraction;
 	}
 
+	b3WorldUnlockForRead( world );
 	return result;
 }
 
 bool b3Body_OverlapShape( b3BodyId bodyId, b3Pos origin, const b3ShapeProxy* proxy, b3QueryFilter filter,
 						  b3WorldTransform bodyTransform )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return false;
@@ -750,17 +754,19 @@ bool b3Body_OverlapShape( b3BodyId bodyId, b3Pos origin, const b3ShapeProxy* pro
 		bool overlaps = b3OverlapShape( shape, transform, proxy );
 		if ( overlaps )
 		{
+			b3WorldUnlockForRead( world );
 			return true;
 		}
 	}
 
+	b3WorldUnlockForRead( world );
 	return false;
 }
 
 int b3Body_CollideMover( b3BodyId bodyId, b3BodyPlaneResult* bodyPlanes, int planeCapacity, b3Pos origin, const b3Capsule* mover,
 						 b3QueryFilter filter, b3WorldTransform bodyTransform )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return 0;
@@ -768,6 +774,7 @@ int b3Body_CollideMover( b3BodyId bodyId, b3BodyPlaneResult* bodyPlanes, int pla
 
 	if ( planeCapacity == 0 )
 	{
+		b3WorldUnlockForRead( world );
 		return 0;
 	}
 
@@ -803,11 +810,13 @@ int b3Body_CollideMover( b3BodyId bodyId, b3BodyPlaneResult* bodyPlanes, int pla
 			resultCount += 1;
 			if ( resultCount == planeCapacity )
 			{
+				b3WorldUnlockForRead( world );
 				return resultCount;
 			}
 		}
 	}
 
+	b3WorldUnlockForRead( world );
 	return resultCount;
 }
 
@@ -817,7 +826,7 @@ b3BodyTOIResult b3Body_TimeOfImpactMover( b3BodyId bodyId, b3Pos origin, const b
 	b3BodyTOIResult result = { 0 };
 	result.fraction = 1.0f;
 
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return result;
@@ -889,6 +898,7 @@ b3BodyTOIResult b3Body_TimeOfImpactMover( b3BodyId bodyId, b3Pos origin, const b
 		}
 	}
 
+	b3WorldUnlockForRead( world );
 	return result;
 }
 
@@ -1233,7 +1243,8 @@ void b3Body_SetLinearVelocity( b3BodyId bodyId, b3Vec3 linearVelocity )
 		return;
 	}
 
-	if ( b3LengthSquared( linearVelocity ) > 0.0f )
+	if ( body->setIndex >= b3_firstSleepingSet &&
+		 b3LengthSquared( linearVelocity ) > body->sleepThreshold * body->sleepThreshold )
 	{
 		b3WakeBodyWithLock( world, body );
 	}
@@ -1268,9 +1279,13 @@ void b3Body_SetAngularVelocity( b3BodyId bodyId, b3Vec3 angularVelocity )
 	w.y = ( body->flags & b3_lockAngularY ) ? 0.0f : angularVelocity.y;
 	w.z = ( body->flags & b3_lockAngularZ ) ? 0.0f : angularVelocity.z;
 
-	if ( b3LengthSquared( w ) != 0.0f )
+	if ( body->setIndex >= b3_firstSleepingSet && b3LengthSquared( w ) > 0.0f )
 	{
-		b3WakeBodyWithLock( world, body );
+		b3BodySim* sim = b3GetBodySim( world, body );
+		if (b3LengthSquared(b3Mul(w, sim->maxExtent)) > body->sleepThreshold * body->sleepThreshold)
+		{
+			b3WakeBodyWithLock( world, body );
+		}
 	}
 
 	b3BodyState* state = b3GetBodyState( world, body );
@@ -1593,7 +1608,7 @@ b3BodyType b3Body_GetType( b3BodyId bodyId )
 //   operations may have no effect, such as transferring a joint to the same set
 void b3Body_SetType( b3BodyId bodyId, b3BodyType type )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForWrite( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -1601,13 +1616,12 @@ void b3Body_SetType( b3BodyId bodyId, b3BodyType type )
 
 	B3_REC( world, BodySetType, bodyId, (int32_t)type );
 
-	world->locked = true;
 	b3Body* body = b3GetBodyFullId( world, bodyId );
 
 	b3BodyType originalType = body->type;
 	if ( originalType == type )
 	{
-		world->locked = false;
+		b3WorldUnlockForWrite( world );
 		return;
 	}
 
@@ -1620,6 +1634,7 @@ void b3Body_SetType( b3BodyId bodyId, b3BodyType type )
 			if ( shape->type == b3_compoundShape || shape->type == b3_heightShape )
 			{
 				// Setting the body type is not supported for bodies with compound shapes
+				b3WorldUnlockForWrite( world );
 				return;
 			}
 
@@ -1646,7 +1661,7 @@ void b3Body_SetType( b3BodyId bodyId, b3BodyType type )
 
 		// Body type affects the mass properties
 		b3UpdateBodyMassData( world, body );
-		world->locked = false;
+		b3WorldUnlockForWrite( world );
 		return;
 	}
 
@@ -1806,7 +1821,7 @@ void b3Body_SetType( b3BodyId bodyId, b3BodyType type )
 	b3ValidateSolverSets( world );
 	b3ValidateIsland( world, body->islandId );
 
-	world->locked = false;
+	b3WorldUnlockForWrite( world );
 }
 
 void b3Body_SetName( b3BodyId bodyId, const char* name )
@@ -1893,7 +1908,7 @@ void b3Body_SetMassData( b3BodyId bodyId, b3MassData massData )
 	B3_ASSERT( b3IsValidMatrix3( massData.inertia ) );
 	B3_ASSERT( b3IsValidVec3( massData.center ) );
 
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -1978,6 +1993,8 @@ void b3Body_SetMassData( b3BodyId bodyId, b3MassData massData )
 
 		edgeKey = contact->edges[edgeIndex].nextKey;
 	}
+
+	b3WorldUnlockForRead( world );
 }
 
 b3MassData b3Body_GetMassData( b3BodyId bodyId )
@@ -1991,7 +2008,7 @@ b3MassData b3Body_GetMassData( b3BodyId bodyId )
 
 void b3Body_ApplyMassFromShapes( b3BodyId bodyId )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -2001,13 +2018,15 @@ void b3Body_ApplyMassFromShapes( b3BodyId bodyId )
 
 	b3Body* body = b3GetBodyFullId( world, bodyId );
 	b3UpdateBodyMassData( world, body );
+
+	b3WorldUnlockForRead( world );
 }
 
 void b3Body_SetLinearDamping( b3BodyId bodyId, float linearDamping )
 {
 	B3_ASSERT( b3IsValidFloat( linearDamping ) && linearDamping >= 0.0f );
 
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -2018,6 +2037,8 @@ void b3Body_SetLinearDamping( b3BodyId bodyId, float linearDamping )
 	b3Body* body = b3GetBodyFullId( world, bodyId );
 	b3BodySim* bodySim = b3GetBodySim( world, body );
 	bodySim->linearDamping = linearDamping;
+
+	b3WorldUnlockForRead( world );
 }
 
 float b3Body_GetLinearDamping( b3BodyId bodyId )
@@ -2032,7 +2053,7 @@ void b3Body_SetAngularDamping( b3BodyId bodyId, float angularDamping )
 {
 	B3_ASSERT( b3IsValidFloat( angularDamping ) && angularDamping >= 0.0f );
 
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -2043,6 +2064,8 @@ void b3Body_SetAngularDamping( b3BodyId bodyId, float angularDamping )
 	b3Body* body = b3GetBodyFullId( world, bodyId );
 	b3BodySim* bodySim = b3GetBodySim( world, body );
 	bodySim->angularDamping = angularDamping;
+
+	b3WorldUnlockForRead( world );
 }
 
 float b3Body_GetAngularDamping( b3BodyId bodyId )
@@ -2058,7 +2081,7 @@ void b3Body_SetGravityScale( b3BodyId bodyId, float gravityScale )
 	B3_ASSERT( b3Body_IsValid( bodyId ) );
 	B3_ASSERT( b3IsValidFloat( gravityScale ) );
 
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -2069,6 +2092,8 @@ void b3Body_SetGravityScale( b3BodyId bodyId, float gravityScale )
 	b3Body* body = b3GetBodyFullId( world, bodyId );
 	b3BodySim* bodySim = b3GetBodySim( world, body );
 	bodySim->gravityScale = gravityScale;
+
+	b3WorldUnlockForRead( world );
 }
 
 float b3Body_GetGravityScale( b3BodyId bodyId )
@@ -2089,15 +2114,13 @@ bool b3Body_IsAwake( b3BodyId bodyId )
 
 void b3Body_SetAwake( b3BodyId bodyId, bool awake )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForWrite( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
 	}
 
 	B3_REC( world, BodySetAwake, bodyId, awake );
-
-	world->locked = true;
 
 	b3Body* body = b3GetBodyFullId( world, bodyId );
 
@@ -2117,7 +2140,7 @@ void b3Body_SetAwake( b3BodyId bodyId, bool awake )
 		b3TrySleepIsland( world, body->islandId );
 	}
 
-	world->locked = false;
+	b3WorldUnlockForWrite( world );
 }
 
 bool b3Body_IsEnabled( b3BodyId bodyId )
@@ -2155,7 +2178,7 @@ void b3Body_SetSafetyFactor( b3BodyId bodyId, float safetyFactor )
 {
 	B3_ASSERT( b3IsValidFloat( safetyFactor ) && safetyFactor >= 0.0f );
 
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -2165,6 +2188,8 @@ void b3Body_SetSafetyFactor( b3BodyId bodyId, float safetyFactor )
 
 	b3Body* body = b3GetBodyFullId( world, bodyId );
 	body->safetyFactor = safetyFactor;
+
+	b3WorldUnlockForRead( world );
 }
 
 float b3Body_GetSafetyFactor( b3BodyId bodyId )
@@ -2176,7 +2201,7 @@ float b3Body_GetSafetyFactor( b3BodyId bodyId )
 
 void b3Body_EnableSleep( b3BodyId bodyId, bool enableSleep )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -2192,7 +2217,7 @@ void b3Body_EnableSleep( b3BodyId bodyId, bool enableSleep )
 		return;
 	}
 
-	world->locked = true;
+	b3ConvertWorldReadToWrite( world );
 
 	body->flags = enableSleep ? body->flags | b3_enableSleep : body->flags & ~b3_enableSleep;
 	b3SyncBodyFlags( world, body );
@@ -2202,14 +2227,14 @@ void b3Body_EnableSleep( b3BodyId bodyId, bool enableSleep )
 		b3WakeBody( world, body );
 	}
 
-	world->locked = false;
+	b3WorldUnlockForWrite( world );
 }
 
 // Disabling a body requires a lot of detailed bookkeeping, but it is a valuable feature.
 // The most challenging aspect that joints may connect to bodies that are not disabled.
 void b3Body_Disable( b3BodyId bodyId )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForWrite( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -2217,12 +2242,10 @@ void b3Body_Disable( b3BodyId bodyId )
 
 	B3_REC( world, BodyDisable, bodyId );
 
-	world->locked = true;
-
 	b3Body* body = b3GetBodyFullId( world, bodyId );
 	if ( body->setIndex == b3_disabledSet )
 	{
-		world->locked = false;
+		b3WorldUnlockForWrite( world );
 		return;
 	}
 
@@ -2281,12 +2304,12 @@ void b3Body_Disable( b3BodyId bodyId )
 	b3ValidateConnectivity( world );
 	b3ValidateSolverSets( world );
 
-	world->locked = false;
+	b3WorldUnlockForWrite( world );
 }
 
 void b3Body_Enable( b3BodyId bodyId )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -2297,6 +2320,7 @@ void b3Body_Enable( b3BodyId bodyId )
 	b3Body* body = b3GetBodyFullId( world, bodyId );
 	if ( body->setIndex != b3_disabledSet )
 	{
+		b3WorldUnlockForRead( world );
 		return;
 	}
 
@@ -2374,11 +2398,13 @@ void b3Body_Enable( b3BodyId bodyId )
 	}
 
 	b3ValidateSolverSets( world );
+
+	b3WorldUnlockForRead( world );
 }
 
 void b3Body_SetMotionLocks( b3BodyId bodyId, b3MotionLocks locks )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -2397,6 +2423,7 @@ void b3Body_SetMotionLocks( b3BodyId bodyId, b3MotionLocks locks )
 	b3Body* body = b3GetBodyFullId( world, bodyId );
 	if ( ( body->flags & b3_allLocks ) == newLocks )
 	{
+		b3WorldUnlockForRead( world );
 		return;
 	}
 
@@ -2447,6 +2474,7 @@ void b3Body_SetMotionLocks( b3BodyId bodyId, b3MotionLocks locks )
 	{
 		b3UpdateBodyMassData( world, body );
 	}
+	b3WorldUnlockForRead( world );
 }
 
 b3MotionLocks b3Body_GetMotionLocks( b3BodyId bodyId )
@@ -2466,7 +2494,7 @@ b3MotionLocks b3Body_GetMotionLocks( b3BodyId bodyId )
 
 void b3Body_SetBullet( b3BodyId bodyId, bool flag )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -2486,6 +2514,7 @@ void b3Body_SetBullet( b3BodyId bodyId, bool flag )
 	body->flags |= newFlag;
 
 	b3SyncBodyFlags( world, body );
+	b3WorldUnlockForRead( world );
 }
 
 bool b3Body_IsBullet( b3BodyId bodyId )
@@ -2497,7 +2526,7 @@ bool b3Body_IsBullet( b3BodyId bodyId )
 
 void b3Body_AllowFastRotation( b3BodyId bodyId, bool flag )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -2510,6 +2539,7 @@ void b3Body_AllowFastRotation( b3BodyId bodyId, bool flag )
 	b3Body* body = b3GetBodyFullId( world, bodyId );
 	if ( ( body->flags & b3_allowFastRotation ) == newFlag )
 	{
+		b3WorldUnlockForRead( world );
 		return;
 	}
 
@@ -2517,6 +2547,7 @@ void b3Body_AllowFastRotation( b3BodyId bodyId, bool flag )
 	body->flags |= newFlag;
 
 	b3SyncBodyFlags( world, body );
+	b3WorldUnlockForRead( world );
 }
 
 bool b3Body_IsFastRotationAllowed( b3BodyId bodyId )
@@ -2528,7 +2559,7 @@ bool b3Body_IsFastRotationAllowed( b3BodyId bodyId )
 
 void b3Body_EnableContactRecycling( b3BodyId bodyId, bool flag )
 {
-	b3World* world = b3GetUnlockedWorld( bodyId.world0 );
+	b3World* world = b3GetWorldForRead( bodyId.world0 );
 	if ( world == NULL )
 	{
 		return;
@@ -2541,6 +2572,7 @@ void b3Body_EnableContactRecycling( b3BodyId bodyId, bool flag )
 	b3Body* body = b3GetBodyFullId( world, bodyId );
 	if ( ( body->flags & b3_enableContactRecycling ) == newFlag )
 	{
+		b3WorldUnlockForRead( world );
 		return;
 	}
 
@@ -2548,6 +2580,7 @@ void b3Body_EnableContactRecycling( b3BodyId bodyId, bool flag )
 	body->flags |= newFlag;
 
 	b3SyncBodyFlags( world, body );
+	b3WorldUnlockForRead( world );
 }
 
 bool b3Body_IsContactRecyclingEnabled( b3BodyId bodyId )
