@@ -247,16 +247,6 @@ void b3ConvertWorldReadToWrite( b3World* world )
 	}
 }
 
-void b3ConvertWorldWriteToRead( b3World* world )
-{
-	B3_ASSERT( world->locked );
-	world->locked = false;
-	if ( world->convertWriteToRead )
-	{
-		world->convertWriteToRead( world->lockContext );
-	}
-}
-
 static void* b3DefaultAddTaskFcn( b3TaskCallback* task, void* taskContext, void* userContext, b3TaskType taskType )
 {
 	B3_UNUSED( userContext, taskType );
@@ -544,7 +534,6 @@ b3WorldId b3CreateWorld( const b3WorldDef* def )
 	world->unlockForRead = def->unlockForRead;
 	world->unlockForWrite = def->unlockForWrite;
 	world->convertReadToWrite = def->convertReadToWrite;
-	world->convertWriteToRead = def->convertWriteToRead;
 	world->lockContext = def->lockContext;
 
 	// add one to worldId so that 0 represents a null b3WorldId

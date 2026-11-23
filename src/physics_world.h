@@ -227,7 +227,6 @@ typedef struct b3World
 	b3WorldLockingCallback* unlockForRead;
 	b3WorldLockingCallback* unlockForWrite;
 	b3WorldLockingCallback* convertReadToWrite;
-	b3WorldLockingCallback* convertWriteToRead;
 	void* lockContext;
 
 	// Id that is incremented every time step
@@ -341,7 +340,6 @@ void b3WorldLockForWrite( b3World* world );
 void b3WorldUnlockForRead( b3World* world );
 void b3WorldUnlockForWrite( b3World* world );
 void b3ConvertWorldReadToWrite( b3World* world );
-void b3ConvertWorldWriteToRead( b3World* world );
 
 void b3World_RebuildStaticTree( b3WorldId worldId );
 

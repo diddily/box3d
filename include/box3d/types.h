@@ -293,7 +293,6 @@ typedef struct b3WorldDef
 	b3WorldLockingCallback* unlockForRead;
 	b3WorldLockingCallback* unlockForWrite;
 	b3WorldLockingCallback* convertReadToWrite;
-	b3WorldLockingCallback* convertWriteToRead;
 	void* lockContext;
 
 	/// Optional initial capacities
