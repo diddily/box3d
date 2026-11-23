@@ -60,6 +60,7 @@ typedef struct b3WorkerContext
 	b3StepContext* context;
 	int workerIndex;
 	void* userTask;
+	char buffer[16];
 } b3WorkerContext;
 
 // Integrate velocities, apply damping, and gyroscopic torque
@@ -1907,10 +1908,9 @@ void b3Solve( b3World* world, b3StepContext* stepContext )
 
 			if ( world->taskCount < B3_MAX_TASKS )
 			{
-				char buffer[16];
-				snprintf( buffer, sizeof( buffer ), "solve[%d]", i );
+				snprintf( workerContext[i].buffer, sizeof( workerContext[i].buffer ), "solve[%d]", i );
 				workerContext[i].userTask =
-					world->enqueueTaskFcn( &b3SolverTask, workerContext + i, world->userTaskContext, buffer );
+					world->enqueueTaskFcn( &b3SolverTask, workerContext + i, world->userTaskContext, workerContext[i].buffer );
 				world->taskCount += 1;
 				world->activeTaskCount += workerContext[i].userTask == NULL ? 0 : 1;
 			}
