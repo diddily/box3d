@@ -1361,7 +1361,7 @@ static int AllOps( void )
 	b3Shape_SetMeshMaterial( meshShapeId, surfMat, 0 );
 
 	// Body mutators: SetTransform, SetLinearVelocity/AngularVelocity (Vec3), SetName,
-	// damping, gravity scale, sleep threshold, SetAwake, EnableSleep, SetBullet, SetMotionLocks,
+	// damping, gravity scale, sleep threshold, SetAwake, EnableSleep, SetBullet, SetFixedRotation,
 	// SetMassData, ApplyMassFromShapes, SetType, SetTargetTransform, Disable/Enable,
 	// EnableContactRecycling, EnableHitEvents, all force/impulse/torque variants
 	b3Body_SetTransform( bodyId, (b3Pos){ 1.0f, 6.0f, 0.0f }, b3Quat_identity );
@@ -1376,7 +1376,7 @@ static int AllOps( void )
 	b3Body_SetBullet( bodyId, true );
 	b3Body_EnableContactRecycling( bodyId, false );
 	b3Body_EnableHitEvents( bodyId, true );
-	b3Body_SetMotionLocks( bodyId, (b3MotionLocks){ false, false, false, false, false, true } );
+	b3Body_SetFixedRotation( bodyId, true );
 	b3MassData massData;
 	massData.mass = 2.0f;
 	massData.center = (b3Vec3){ 0.0f, 0.0f, 0.0f };
@@ -1594,12 +1594,21 @@ static int AllOps( void )
 	b3ParallelJoint_SetSpringDampingRatio( parallelId, 0.5f );
 	b3ParallelJoint_SetMaxTorque( parallelId, 20.0f );
 
+	b3MotionLockJointDef motionLockDef = b3DefaultMotionLockJointDef();
+	motionLockDef.base.bodyIdA = groundId;
+	motionLockDef.base.bodyIdB = jb[0];
+	motionLockDef.lockLinearZ = true;
+	motionLockDef.lockAngularXY = true;
+	b3JointId motionLockId = b3CreateMotionLockJoint( worldId, &motionLockDef );
+	b3MotionLockJoint_EnableLinearLock( motionLockId, 0, true );
+	b3MotionLockJoint_EnableAngularLock( motionLockId, false );
+	b3MotionLockJoint_EnableAngularLock( motionLockId, true );
+
 	// Dynamic mover: a rotation locked capsule driven by a mover joint and held up by a pogo joint
 	b3BodyDef moverBodyDef = b3DefaultBodyDef();
 	moverBodyDef.type = b3_dynamicBody;
 	moverBodyDef.position = (b3Pos){ -20.0f, 3.0f, 0.0f };
-	moverBodyDef.motionLocks =
-		(b3MotionLocks){ .angularX = true, .angularY = true, .angularZ = true };
+	moverBodyDef.fixedRotation = true;
 	b3BodyId moverBodyId = b3CreateBody( worldId, &moverBodyDef );
 	b3ShapeDef moverShapeDef = b3DefaultShapeDef();
 	moverShapeDef.density = 1.0f;
@@ -2480,8 +2489,44 @@ static int GeometryMutatorReplay( void )
 	return 0;
 }
 
+// The snapshot restores into a fresh world with no move events, so a body put to sleep before the
+// first replayed step must not use the move index it had when recording started. Issue #197.
+static int SleepAfterRestore( void )
+{
+	b3WorldDef worldDef = b3DefaultWorldDef();
+	b3WorldId worldId = b3CreateWorld( &worldDef );
+
+	b3Sphere sphere = { { 0.0f, 0.0f, 0.0f }, 0.5f };
+	b3BodyId bodyIds[16];
+	for ( int i = 0; i < 16; ++i )
+	{
+		b3BodyDef bodyDef = b3DefaultBodyDef();
+		bodyDef.type = b3_dynamicBody;
+		bodyDef.position = (b3Pos){ 2.0f * i, 10.0f, 0.0f };
+		bodyIds[i] = b3CreateBody( worldId, &bodyDef );
+		b3ShapeDef shapeDef = b3DefaultShapeDef();
+		b3CreateSphereShape( bodyIds[i], &shapeDef, &sphere );
+	}
+
+	b3World_Step( worldId, 1.0f / 60.0f, 4 );
+
+	b3Recording* rec = b3CreateRecording( 0 );
+	ENSURE( rec != NULL );
+	b3World_StartRecording( worldId, rec );
+	b3Body_SetAwake( bodyIds[15], false );
+	b3World_Step( worldId, 1.0f / 60.0f, 4 );
+	b3World_StopRecording( worldId );
+	b3DestroyWorld( worldId );
+
+	ENSURE( b3ValidateReplay( b3Recording_GetData( rec ), b3Recording_GetSize( rec ), 1 ) );
+
+	b3DestroyRecording( rec );
+	return 0;
+}
+
 int RecordingTest( void )
 {
+	RUN_SUBTEST( SleepAfterRestore );
 	RUN_SUBTEST( GeometryHashCollision );
 	RUN_SUBTEST( ShapeNameReplay );
 	RUN_SUBTEST( SphereRoundTrip );

@@ -844,6 +844,54 @@ static int TestOverflowColorPile( void )
 	return 0;
 }
 
+// s&box report: more than UINT16_MAX overflow contacts tripped an assert in the overflow
+// prepare and truncated the block count in the other overflow stages. Every contact joins
+// the same two bodies, so all but one land in the overflow color. Two bodies keep it fast in Debug.
+static int TestOverflowColorLarge( void )
+{
+	b3WorldDef worldDef = b3DefaultWorldDef();
+	worldDef.gravity = b3Vec3_zero;
+	worldDef.workerCount = 1;
+	b3WorldId worldId = b3CreateWorld( &worldDef );
+
+	int side = 260;
+	float spacing = 1.5f;
+	float extent = 0.5f * spacing * side;
+
+	b3BodyDef bodyDef = b3DefaultBodyDef();
+	bodyDef.type = b3_dynamicBody;
+	b3BodyId slabId = b3CreateBody( worldId, &bodyDef );
+	b3ShapeDef shapeDef = b3DefaultShapeDef();
+	b3BoxHull slab = b3MakeBoxHull( extent, 0.5f, extent );
+	b3CreateHullShape( slabId, &shapeDef, &slab.base );
+
+	bodyDef.position = (b3Pos){ 0.0f, 0.99f, 0.0f };
+	b3BodyId bedId = b3CreateBody( worldId, &bodyDef );
+	shapeDef.updateBodyMass = false;
+	for ( int i = 0; i < side; ++i )
+	{
+		for ( int j = 0; j < side; ++j )
+		{
+			b3Sphere sphere = { { -extent + spacing * ( i + 0.5f ), 0.0f, -extent + spacing * ( j + 0.5f ) }, 0.5f };
+			b3CreateSphereShape( bedId, &shapeDef, &sphere );
+		}
+	}
+	b3Body_ApplyMassFromShapes( bedId );
+
+	for ( int i = 0; i < 2; ++i )
+	{
+		b3World_Step( worldId, 1.0f / 60.0f, 4 );
+	}
+
+	b3Counters counters = b3World_GetCounters( worldId );
+	int overflowContacts = counters.colorCounts[B3_GRAPH_COLOR_COUNT - 1];
+
+	b3DestroyWorld( worldId );
+
+	ENSURE( overflowContacts > UINT16_MAX );
+	return 0;
+}
+
 // Exposes that b3Body_EnableSleep mutates body->flags but never syncs
 // bodySim->flags / bodyState->flags. When a body created with
 // enableSleep=false is later flipped on, body->flags gains b3_enableSleep
@@ -875,15 +923,15 @@ static int EnableSleepFlagSyncTest( void )
 
 // Exposes that b3Body_SetBullet writes only bodySim->flags without
 // touching body->flags, while b3SyncBodyFlags overwrites bodySim from
-// body->flags. Any subsequent b3Body_SetMotionLocks or b3Body_SetType
+// body->flags. Any subsequent b3Body_SetFixedRotation or b3Body_SetType
 // silently wipes (or re-asserts) the bullet bit.
 //
 // Reproducer A: create with isBullet=false, SetBullet(true), then
-// SetMotionLocks. b3Body_IsBullet returns false today (wiped); should be
+// SetFixedRotation. b3Body_IsBullet returns false today (wiped); should be
 // true after fix.
 //
 // Reproducer B: create with isBullet=true, SetBullet(false), then
-// SetMotionLocks. b3Body_IsBullet returns true today (re-asserted); should
+// SetFixedRotation. b3Body_IsBullet returns true today (re-asserted); should
 // be false after fix.
 static int SetBulletDriftTest( void )
 {
@@ -901,9 +949,7 @@ static int SetBulletDriftTest( void )
 		b3Body_SetBullet( bodyId, true );
 		ENSURE( b3Body_IsBullet( bodyId ) == true );
 
-		b3MotionLocks locks = { 0 };
-		locks.linearX = true;
-		b3Body_SetMotionLocks( bodyId, locks );
+		b3Body_SetFixedRotation( bodyId, true );
 
 		ENSURE( b3Body_IsBullet( bodyId ) == true );
 	}
@@ -919,9 +965,7 @@ static int SetBulletDriftTest( void )
 		b3Body_SetBullet( bodyId, false );
 		ENSURE( b3Body_IsBullet( bodyId ) == false );
 
-		b3MotionLocks locks = { 0 };
-		locks.linearX = true;
-		b3Body_SetMotionLocks( bodyId, locks );
+		b3Body_SetFixedRotation( bodyId, true );
 
 		ENSURE( b3Body_IsBullet( bodyId ) == false );
 	}
@@ -1760,11 +1804,9 @@ static int LocatorFastFlagTest( void )
 	b3BodySim* sim = b3GetBodySim( world, body );
 	ENSURE( ( sim->flags & b3_isFast ) != 0 );
 
-	// Any public setter that syncs flags. The locks have to actually change or the setter
+	// Any public setter that syncs flags. The flag has to actually change or the setter
 	// returns early and never syncs.
-	b3MotionLocks locks = { 0 };
-	locks.angularX = true;
-	b3Body_SetMotionLocks( bulletId, locks );
+	b3Body_SetFixedRotation( bulletId, true );
 
 	sim = b3GetBodySim( world, b3GetBodyFullId( world, bulletId ) );
 	ENSURE( ( sim->flags & b3_isFast ) != 0 );
@@ -2034,6 +2076,7 @@ int WorldTest( void )
 	RUN_SUBTEST( TestCompoundHitEvents );
 	RUN_SUBTEST( TestCompoundContactMaterials );
 	RUN_SUBTEST( TestOverflowColorPile );
+	RUN_SUBTEST( TestOverflowColorLarge );
 	RUN_SUBTEST( SetBulletDriftTest );
 	RUN_SUBTEST( EnableSleepFlagSyncTest );
 	RUN_SUBTEST( EnableSleepNoopUnlockTest );

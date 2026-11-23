@@ -11,6 +11,7 @@
 #include "box3d/box3d.h"
 
 #include <ctype.h>
+#include <float.h>
 #include <iterator>
 #include <stdio.h>
 #include <stdlib.h>
@@ -136,8 +137,7 @@ public:
 	}
 };
 
-static int sampleMultiplePrismatic =
-	RegisterSample( "Issues", "Multiple Prismatic", MultiplePrismatic::Create );
+static int sampleMultiplePrismatic = RegisterSample( "Issues", "Multiple Prismatic", MultiplePrismatic::Create );
 
 // bad hull SM_Waterfall_MED_Wide_01
 static const b3Vec3 waterfallPoints[] = {
@@ -354,8 +354,7 @@ public:
 
 		b3AABB bounds = b3MakeAABB( m_points.data(), (int)m_points.size(), 0.0f );
 		float radius = b3Length( b3AABB_Extents( bounds ) );
-		m_camera->SetView( 0.0f, 15.0f, b3MaxFloat( 3.0f * radius, 1.0f ),
-						   b3ToPos( b3AABB_Center( bounds ) ) );
+		m_camera->SetView( 0.0f, 15.0f, b3MaxFloat( 3.0f * radius, 1.0f ), b3ToPos( b3AABB_Center( bounds ) ) );
 	}
 
 	bool DrawControls() override
@@ -364,8 +363,8 @@ public:
 
 		if ( m_hull != nullptr )
 		{
-			DrawTextLine( "hull: vertices = %d, edges = %d, faces = %d", m_hull->vertexCount,
-						  m_hull->edgeCount / 2, m_hull->faceCount );
+			DrawTextLine( "hull: vertices = %d, edges = %d, faces = %d", m_hull->vertexCount, m_hull->edgeCount / 2,
+						  m_hull->faceCount );
 		}
 		else
 		{
@@ -577,9 +576,7 @@ public:
 			b3BodyDef bodyDef = b3DefaultBodyDef();
 			bodyDef.type = b3_dynamicBody;
 			bodyDef.position = { 0.0f, 3.5f, 0.0f };
-			bodyDef.motionLocks.angularX = true;
-			bodyDef.motionLocks.angularY = true;
-			bodyDef.motionLocks.angularZ = true;
+			bodyDef.fixedRotation = true;
 			bodyDef.enableContactRecycling = false;
 			b3BodyId bodyId = b3CreateBody( m_worldId, &bodyDef );
 
@@ -653,9 +650,7 @@ public:
 			b3BodyDef bodyDef = b3DefaultBodyDef();
 			bodyDef.type = b3_dynamicBody;
 			bodyDef.position = { 0.0f, 4.0f, 10.0f };
-			bodyDef.motionLocks.angularX = true;
-			bodyDef.motionLocks.angularY = true;
-			bodyDef.motionLocks.angularZ = true;
+			bodyDef.fixedRotation = true;
 			bodyDef.enableSleep = false;
 			bodyDef.enableContactRecycling = false;
 			b3BodyId body = b3CreateBody( m_worldId, &bodyDef );
@@ -748,13 +743,11 @@ public:
 			b3BodyDef bodyDef = b3DefaultBodyDef();
 			bodyDef.type = b3_dynamicBody;
 			bodyDef.position = { -m_walkRangeX, m_bodyHalfHeight + 0.1f, 0.0f };
-			bodyDef.motionLocks.angularX = true;
-			bodyDef.motionLocks.angularY = true;
-			bodyDef.motionLocks.angularZ = true;
+			bodyDef.fixedRotation = true;
 			bodyDef.enableSleep = false;
 
 			// With current ghost mitigation this seems unnecessary
-			//bodyDef.enableContactRecycling = false;
+			// bodyDef.enableContactRecycling = false;
 
 			bodyDef.gravityScale = 2.03f; // s&box gravity: 800 inch/s^2
 			bodyDef.name = "character";
@@ -770,7 +763,7 @@ public:
 			shapeDef.density = m_characterMass / volume;
 
 			// With current ghost mitigation this seems unnecessary
-			//shapeDef.enableSpeculativeContact = false;
+			// shapeDef.enableSpeculativeContact = false;
 
 			b3BoxHull box = b3MakeBoxHull( m_bodyHalfWidth, m_bodyHalfHeight, m_bodyHalfWidth );
 			b3CreateHullShape( m_characterId, &shapeDef, &box.base );
@@ -842,8 +835,8 @@ public:
 		return x;
 	}
 
-	static void EmitTriangle( std::vector<b3Vec3>& vertices, std::vector<int32_t>& indices,
-							  b3Vec3 a, b3Vec3 b, b3Vec3 c )
+	static void EmitTriangle( std::vector<b3Vec3>& vertices, std::vector<int32_t>& indices, b3Vec3 a, b3Vec3 b,
+							  b3Vec3 c )
 	{
 		int32_t base = (int32_t)vertices.size();
 		vertices.push_back( a );
@@ -855,8 +848,8 @@ public:
 	}
 
 	// Horizontal patch at height y spanning [x0,x1]x[z0,z1] (inches), normal +y
-	static void EmitPatch( std::vector<b3Vec3>& vertices, std::vector<int32_t>& indices, float x0,
-						   float x1, float z0, float z1, float y, float cell )
+	static void EmitPatch( std::vector<b3Vec3>& vertices, std::vector<int32_t>& indices, float x0, float x1, float z0,
+						   float z1, float y, float cell )
 	{
 		if ( x1 - x0 < 0.01f )
 		{
@@ -896,8 +889,8 @@ public:
 	}
 
 	// Sloped strip from edge (xLow, yLow) to edge (xHigh, yHigh) spanning the full z width
-	static void EmitSlope( std::vector<b3Vec3>& vertices, std::vector<int32_t>& indices, float xLow,
-						   float yLow, float xHigh, float yHigh, float zCell, bool fixWinding )
+	static void EmitSlope( std::vector<b3Vec3>& vertices, std::vector<int32_t>& indices, float xLow, float yLow,
+						   float xHigh, float yHigh, float zCell, bool fixWinding )
 	{
 		// The original winding only faces out for a slope rising toward +x
 		bool flip = fixWinding && xHigh < xLow;
@@ -905,10 +898,8 @@ public:
 		int countZ = (int)( 2.0f * (float)m_halfWidthU / zCell + 0.99f );
 		for ( int iz = 0; iz < countZ; ++iz )
 		{
-			float z0 =
-				-(float)m_halfWidthU + 2.0f * (float)m_halfWidthU * (float)iz / (float)countZ;
-			float z1 = -(float)m_halfWidthU +
-					   2.0f * (float)m_halfWidthU * (float)( iz + 1 ) / (float)countZ;
+			float z0 = -(float)m_halfWidthU + 2.0f * (float)m_halfWidthU * (float)iz / (float)countZ;
+			float z1 = -(float)m_halfWidthU + 2.0f * (float)m_halfWidthU * (float)( iz + 1 ) / (float)countZ;
 
 			b3Vec3 l0 = { SRC * xLow, SRC * yLow, SRC * z0 };
 			b3Vec3 l1 = { SRC * xLow, SRC * yLow, SRC * z1 };
@@ -929,8 +920,8 @@ public:
 	}
 
 	// Vertical wall at x from y0 (bottom) to y1 (top). facing = +1 faces +x, -1 faces -x
-	static void EmitWall( std::vector<b3Vec3>& vertices, std::vector<int32_t>& indices, float x,
-						  float y0, float y1, int facing, float zCell, bool fixWinding )
+	static void EmitWall( std::vector<b3Vec3>& vertices, std::vector<int32_t>& indices, float x, float y0, float y1,
+						  int facing, float zCell, bool fixWinding )
 	{
 		// The original winding faced every wall into the solid
 		bool faceNegativeX = fixWinding ? facing < 0 : facing > 0;
@@ -938,10 +929,8 @@ public:
 		int countZ = (int)( 2.0f * (float)m_halfWidthU / zCell + 0.99f );
 		for ( int iz = 0; iz < countZ; ++iz )
 		{
-			float z0 =
-				-(float)m_halfWidthU + 2.0f * (float)m_halfWidthU * (float)iz / (float)countZ;
-			float z1 = -(float)m_halfWidthU +
-					   2.0f * (float)m_halfWidthU * (float)( iz + 1 ) / (float)countZ;
+			float z0 = -(float)m_halfWidthU + 2.0f * (float)m_halfWidthU * (float)iz / (float)countZ;
+			float z1 = -(float)m_halfWidthU + 2.0f * (float)m_halfWidthU * (float)( iz + 1 ) / (float)countZ;
 
 			b3Vec3 b0 = { SRC * x, SRC * y0, SRC * z0 };
 			b3Vec3 b1 = { SRC * x, SRC * y0, SRC * z1 };
@@ -977,31 +966,29 @@ public:
 	// fixed per call, so a corner locked by a t-junction stays locked after its seam closes.
 	// Repeating reclassifies, but the error limit applies per pass, so deviation can accumulate.
 	// Winding is not repaired. Returns the number of passes.
-	static int Remesh( std::vector<b3Vec3>& vertices, std::vector<int32_t>& indices,
-					   float errorLimit, unsigned int options, bool repeat )
+	static int Remesh( std::vector<b3Vec3>& vertices, std::vector<int32_t>& indices, float errorLimit,
+					   unsigned int options, bool repeat )
 	{
 		size_t indexCount = indices.size();
 		const unsigned int* sourceIndices = reinterpret_cast<const unsigned int*>( indices.data() );
 
 		std::vector<unsigned int> remap( vertices.size() );
-		size_t vertexCount =
-			meshopt_generateVertexRemap( remap.data(), sourceIndices, indexCount, vertices.data(),
-										 vertices.size(), sizeof( b3Vec3 ) );
+		size_t vertexCount = meshopt_generateVertexRemap( remap.data(), sourceIndices, indexCount, vertices.data(),
+														  vertices.size(), sizeof( b3Vec3 ) );
 
 		std::vector<unsigned int> welded( indexCount );
 		meshopt_remapIndexBuffer( welded.data(), sourceIndices, indexCount, remap.data() );
 
 		std::vector<b3Vec3> positions( vertexCount );
-		meshopt_remapVertexBuffer( positions.data(), vertices.data(), vertices.size(),
-								   sizeof( b3Vec3 ), remap.data() );
+		meshopt_remapVertexBuffer( positions.data(), vertices.data(), vertices.size(), sizeof( b3Vec3 ), remap.data() );
 
 		std::vector<unsigned int> simplified( indexCount );
 		int passCount = 0;
 		for ( ;; )
 		{
-			size_t simplifiedCount = meshopt_simplify(
-				simplified.data(), welded.data(), welded.size(), &positions[0].x, vertexCount,
-				sizeof( b3Vec3 ), 0, errorLimit, meshopt_SimplifyErrorAbsolute | options, nullptr );
+			size_t simplifiedCount =
+				meshopt_simplify( simplified.data(), welded.data(), welded.size(), &positions[0].x, vertexCount,
+								  sizeof( b3Vec3 ), 0, errorLimit, meshopt_SimplifyErrorAbsolute | options, nullptr );
 			passCount += 1;
 
 			bool reduced = simplifiedCount < welded.size();
@@ -1013,9 +1000,8 @@ public:
 			}
 		}
 
-		size_t usedCount =
-			meshopt_optimizeVertexFetch( positions.data(), welded.data(), welded.size(),
-										 positions.data(), vertexCount, sizeof( b3Vec3 ) );
+		size_t usedCount = meshopt_optimizeVertexFetch( positions.data(), welded.data(), welded.size(),
+														positions.data(), vertexCount, sizeof( b3Vec3 ) );
 		positions.resize( usedCount );
 
 		vertices = positions;
@@ -1033,8 +1019,7 @@ public:
 		// --- Concrete slabs at y = 0 outside the beam region ---
 		// Tiles tessellate at a hash-picked resolution so neighbors meet with T-junctions,
 		// like cooked s&box map collision.
-		float slabSpans[2][2] = { { -(float)m_halfLengthU, m_beamRegion0 },
-								  { m_beamRegion1, (float)m_halfLengthU } };
+		float slabSpans[2][2] = { { -(float)m_halfLengthU, m_beamRegion0 }, { m_beamRegion1, (float)m_halfLengthU } };
 		for ( int i = 0; i < 2; ++i )
 		{
 			if ( ClipSpan( slabSpans[i][0], slabSpans[i][1], x0U, x1U, &s0, &s1 ) == false )
@@ -1050,12 +1035,10 @@ public:
 					// Seeded by side rather than chunk so combined and split floors tessellate the
 					// same
 					uint32_t side = tx < 0.0f ? 0u : 1u;
-					uint32_t h =
-						Hash( (uint32_t)( (int)tx * 73856093 ) ^ (uint32_t)( tz * 19349663 ) ^
-							  (uint32_t)( side * 2654435761u ) );
+					uint32_t h = Hash( (uint32_t)( (int)tx * 73856093 ) ^ (uint32_t)( tz * 19349663 ) ^
+									   (uint32_t)( side * 2654435761u ) );
 					float cells[3] = { 4.0f, 8.0f, 16.0f };
-					EmitPatch( vertices, indices, tx, tx1, (float)tz, (float)( tz + m_tileSizeU ),
-							   0.0f, cells[h % 3] );
+					EmitPatch( vertices, indices, tx, tx1, (float)tz, (float)( tz + m_tileSizeU ), 0.0f, cells[h % 3] );
 				}
 			}
 		}
@@ -1078,20 +1061,18 @@ public:
 			float top1 = pitRight ? bx + m_beamWidthU - m_chamferWidthU : bx + m_beamWidthU;
 			if ( ClipSpan( top0, top1, x0U, x1U, &s0, &s1 ) )
 			{
-				EmitPatch( vertices, indices, s0, s1, -(float)m_halfWidthU, (float)m_halfWidthU,
-						   0.0f, 8.0f );
+				EmitPatch( vertices, indices, s0, s1, -(float)m_halfWidthU, (float)m_halfWidthU, 0.0f, 8.0f );
 			}
 
 			// Chamfers sloping below the walkable plane
 			if ( pitLeft && bx >= x0U && bx < x1U )
 			{
-				EmitSlope( vertices, indices, bx, pitTop, bx + m_chamferWidthU, 0.0f, 8.0f,
-						   m_fixWinding );
+				EmitSlope( vertices, indices, bx, pitTop, bx + m_chamferWidthU, 0.0f, 8.0f, m_fixWinding );
 			}
 			if ( pitRight && bx + m_beamWidthU > x0U && bx + m_beamWidthU <= x1U )
 			{
-				EmitSlope( vertices, indices, bx + m_beamWidthU, pitTop,
-						   bx + m_beamWidthU - m_chamferWidthU, 0.0f, 8.0f, m_fixWinding );
+				EmitSlope( vertices, indices, bx + m_beamWidthU, pitTop, bx + m_beamWidthU - m_chamferWidthU, 0.0f,
+						   8.0f, m_fixWinding );
 			}
 
 			// Pit to the right of this beam
@@ -1101,26 +1082,24 @@ public:
 				float pitR = bx + m_beamPitchU;
 				if ( pitL >= x0U && pitL < x1U )
 				{
-					EmitWall( vertices, indices, pitL, pitBottom, pitTop, +1, wellCell,
-							  m_fixWinding );
+					EmitWall( vertices, indices, pitL, pitBottom, pitTop, +1, wellCell, m_fixWinding );
 				}
 				if ( pitR > x0U && pitR <= x1U )
 				{
-					EmitWall( vertices, indices, pitR, pitBottom, pitTop, -1, wellCell,
-							  m_fixWinding );
+					EmitWall( vertices, indices, pitR, pitBottom, pitTop, -1, wellCell, m_fixWinding );
 				}
 				if ( ClipSpan( pitL, pitR, x0U, x1U, &s0, &s1 ) )
 				{
-					EmitPatch( vertices, indices, s0, s1, -(float)m_halfWidthU, (float)m_halfWidthU,
-							   pitBottom, wellCell );
+					EmitPatch( vertices, indices, s0, s1, -(float)m_halfWidthU, (float)m_halfWidthU, pitBottom,
+							   wellCell );
 				}
 			}
 		}
 
 		if ( m_remesh )
 		{
-			m_simplifyPassCount[chunk] = Remesh(
-				vertices, indices, 0.001f * m_simplifyErrorMillimeters, 0, m_repeatSimplify );
+			m_simplifyPassCount[chunk] =
+				Remesh( vertices, indices, 0.001f * m_simplifyErrorMillimeters, 0, m_repeatSimplify );
 		}
 
 		m_chunkTriangleCount[chunk] = (int)( indices.size() / 3 );
@@ -1205,8 +1184,8 @@ public:
 		}
 
 		b3Vec3 currentVelocity = b3Body_GetLinearVelocity( m_characterId );
-		DrawTextLine( "ghost launches: %d, worst: %.2f m/s (%.0f inch/s)", m_launchCount,
-					  m_maxLaunchSpeed, m_maxLaunchSpeed / SRC );
+		DrawTextLine( "ghost launches: %d, worst: %.2f m/s (%.0f inch/s)", m_launchCount, m_maxLaunchSpeed,
+					  m_maxLaunchSpeed / SRC );
 		DrawTextLine( "vertical velocity: %.2f m/s", currentVelocity.y );
 		if ( m_combineChunks )
 		{
@@ -1214,15 +1193,14 @@ public:
 		}
 		else
 		{
-			DrawTextLine( "floor triangles: %d (chunks %d + %d)",
-						  m_chunkTriangleCount[0] + m_chunkTriangleCount[1],
+			DrawTextLine( "floor triangles: %d (chunks %d + %d)", m_chunkTriangleCount[0] + m_chunkTriangleCount[1],
 						  m_chunkTriangleCount[0], m_chunkTriangleCount[1] );
 		}
 
 		if ( m_remesh )
 		{
-			DrawTextLine( m_combineChunks ? "simplify passes: %d" : "simplify passes: %d + %d",
-						  m_simplifyPassCount[0], m_simplifyPassCount[1] );
+			DrawTextLine( m_combineChunks ? "simplify passes: %d" : "simplify passes: %d + %d", m_simplifyPassCount[0],
+						  m_simplifyPassCount[1] );
 		}
 	}
 
@@ -1248,8 +1226,7 @@ public:
 							ImGuiSliderFlags_Logarithmic );
 		rebuild = ( ImGui::IsItemDeactivatedAfterEdit() && m_remesh ) || rebuild;
 
-		rebuild =
-			( ImGui::Checkbox( "Repeat Simplify", &m_repeatSimplify ) && m_remesh ) || rebuild;
+		rebuild = ( ImGui::Checkbox( "Repeat Simplify", &m_repeatSimplify ) && m_remesh ) || rebuild;
 
 		if ( rebuild )
 		{
@@ -1273,10 +1250,9 @@ public:
 		return new SBoxGhostCollisions( context );
 	}
 
-	static constexpr float m_walkRangeX = 3.5f; // turn around beyond +/- this x (meters)
-	static constexpr float m_walkRangeZ = 0.5f; // turn around beyond +/- this x (meters)
-	static constexpr float m_launchThreshold =
-		0.5f; // upward m/s counted as a ghost launch (~20 inch/s)
+	static constexpr float m_walkRangeX = 3.5f;		 // turn around beyond +/- this x (meters)
+	static constexpr float m_walkRangeZ = 0.5f;		 // turn around beyond +/- this x (meters)
+	static constexpr float m_launchThreshold = 0.5f; // upward m/s counted as a ghost launch (~20 inch/s)
 	static constexpr int m_markerCapacity = 64;
 
 	b3MeshData* m_chunkMesh[2] = {};
@@ -1557,14 +1533,14 @@ public:
 		b3Profile p = b3World_GetProfile( m_worldId );
 		float substepRate = m_context->hertz * m_context->subStepCount;
 
-		DrawTextLine( "wheels %d, hull pieces/wheel %d (%d total shapes)", m_wheelCount,
-					  s_metalWheel1HullCount, m_wheelCount * s_metalWheel1HullCount );
-		DrawTextLine( "step %.0f hz, sub-steps %d -> substep rate %.0f hz", m_context->hertz,
-					  m_context->subStepCount, substepRate );
+		DrawTextLine( "wheels %d, hull pieces/wheel %d (%d total shapes)", m_wheelCount, s_metalWheel1HullCount,
+					  m_wheelCount * s_metalWheel1HullCount );
+		DrawTextLine( "step %.0f hz, sub-steps %d -> substep rate %.0f hz", m_context->hertz, m_context->subStepCount,
+					  substepRate );
 		DrawTextLine( "eff contact hz = min(240, %.0f) = %.0f", 0.125f * substepRate,
 					  b3MinFloat( 240.0f, 0.125f * substepRate ) );
-		DrawTextLine( "step %.3f ms | collide %.3f ms (%.0f%%) | solve %.3f ms (%.0f%%)", p.step,
-					  p.collide, p.step > 0.0f ? 100.0f * p.collide / p.step : 0.0f, p.solve,
+		DrawTextLine( "step %.3f ms | collide %.3f ms (%.0f%%) | solve %.3f ms (%.0f%%)", p.step, p.collide,
+					  p.step > 0.0f ? 100.0f * p.collide / p.step : 0.0f, p.solve,
 					  p.step > 0.0f ? 100.0f * p.solve / p.step : 0.0f );
 	}
 
@@ -1679,11 +1655,10 @@ public:
 		DrawTextLine( "drop height = %.2f m", m_dropHeight );
 		DrawTextLine( "current y   = %.2f m", m_currentY );
 		DrawTextLine( "max bounce  = %.2f m", m_maxBounceY );
-		DrawTextLine( "kinetic     = %.0f J linear + %.0f J angular", energy.linear,
-					  energy.angular );
+		DrawTextLine( "kinetic     = %.0f J linear + %.0f J angular", energy.linear, energy.angular );
 		DrawTextLine( "potential   = %.0f J", energy.potential );
-		DrawTextLine( "total       = %.0f J (%.2f%% of start, peak %.2f%%)", total,
-					  100.0f * total / m_startEnergy, 100.0f * m_maxEnergy / m_startEnergy );
+		DrawTextLine( "total       = %.0f J (%.2f%% of start, peak %.2f%%)", total, 100.0f * total / m_startEnergy,
+					  100.0f * m_maxEnergy / m_startEnergy );
 
 		if ( m_bounced == false )
 		{
@@ -1905,13 +1880,14 @@ public:
 		// Velocity is zeroed every step, so without this the mover falls asleep on the first one
 		bodyDef.enableSleep = false;
 
-		// A room planner slides items on the floor plane and yaws them to face a wall
-		bodyDef.motionLocks = { false, true, false, true, false, true };
 		m_moverId = b3CreateBody( m_worldId, &bodyDef );
 
 		b3BoxHull mover = b3MakeBoxHull( m_moverHalfExtent, m_moverHalfExtent, m_moverHalfExtent );
 		shapeDef.baseMaterial.friction = 0.0f;
 		b3CreateHullShape( m_moverId, &shapeDef, &mover.base );
+
+		// A room planner slides items on the floor plane and yaws them to face a wall
+		LockMotion( m_moverId, { .linearY = true, .rotation = e_spinY } );
 	}
 
 	void PlaceMover()
@@ -1950,10 +1926,8 @@ public:
 		float interiorRestX = -m_wallHalfThickness - m_moverHalfExtent;
 		float exteriorRestX = m_wallHalfThickness + m_moverHalfExtent;
 
-		b3Vec3 lower = { interiorRestX - m_moverHalfExtent, m_wallHalfHeight - m_moverHalfExtent,
-						 -m_moverHalfExtent };
-		b3Vec3 upper = { interiorRestX + m_moverHalfExtent, m_wallHalfHeight + m_moverHalfExtent,
-						 m_moverHalfExtent };
+		b3Vec3 lower = { interiorRestX - m_moverHalfExtent, m_wallHalfHeight - m_moverHalfExtent, -m_moverHalfExtent };
+		b3Vec3 upper = { interiorRestX + m_moverHalfExtent, m_wallHalfHeight + m_moverHalfExtent, m_moverHalfExtent };
 		DrawAabb( lower, upper, MakeColor( b3_colorLime ) );
 
 		float x = (float)b3Body_GetPosition( m_moverId ).x;
@@ -1984,8 +1958,7 @@ public:
 	float m_startX = 0.2f;
 };
 
-static int sampleThinWallPushOut =
-	RegisterSample( "Issues", "Thin Wall Push Out", ThinWallPushOut::Create );
+static int sampleThinWallPushOut = RegisterSample( "Issues", "Thin Wall Push Out", ThinWallPushOut::Create );
 
 // Two crates resting on a rolling deck, one each side of the roll axis: the orange crate with
 // contact recycling (the default), the blue crate with it off for its body.
@@ -2061,8 +2034,7 @@ public:
 		{
 			b3BodyDef bodyDef = b3DefaultBodyDef();
 			bodyDef.type = b3_dynamicBody;
-			bodyDef.position = { 0.0f, m_deckHalfThickness + m_crateHalf,
-								 i == 0 ? m_crateOffset : -m_crateOffset };
+			bodyDef.position = { 0.0f, m_deckHalfThickness + m_crateHalf, i == 0 ? m_crateOffset : -m_crateOffset };
 
 			// The orange crate recycles its contact with the deck, the blue crate doesn't. Both
 			// stay awake, so a small roll can't put them to sleep.
@@ -2136,10 +2108,8 @@ public:
 
 		if ( timeStep > 0.0f )
 		{
-			b3Quat rotation =
-				b3MakeQuatFromAxisAngle( b3Vec3_axisX, RollAngle( m_time + timeStep ) );
-			b3Body_SetTargetTransform( m_deckId, { { 0.0f, 0.0f, 0.0f }, rotation }, timeStep,
-									   true );
+			b3Quat rotation = b3MakeQuatFromAxisAngle( b3Vec3_axisX, RollAngle( m_time + timeStep ) );
+			b3Body_SetTargetTransform( m_deckId, { { 0.0f, 0.0f, 0.0f }, rotation }, timeStep, true );
 		}
 
 		Sample::Step();
@@ -2167,12 +2137,10 @@ public:
 
 			// The deck's up (white) and the crate's contact normal (in the crate's color), from the
 			// crate's center
-			DrawArrow( center, b3OffsetPos( center, b3MulSV( 2.5f, deckUp ) ),
-					   MakeColor( b3_colorWhite ) );
+			DrawArrow( center, b3OffsetPos( center, b3MulSV( 2.5f, deckUp ) ), MakeColor( b3_colorWhite ) );
 
 			b3ContactData contactData;
-			if ( b3Body_GetContactData( m_crateIds[i], &contactData, 1 ) == 1 &&
-				 contactData.manifoldCount > 0 )
+			if ( b3Body_GetContactData( m_crateIds[i], &contactData, 1 ) == 1 && contactData.manifoldCount > 0 )
 			{
 				b3Vec3 normal = contactData.manifolds[0].normal;
 				if ( b3Dot( normal, deckUp ) < 0.0f )
@@ -2181,8 +2149,7 @@ public:
 				}
 
 				DrawArrow( center, b3OffsetPos( center, b3MulSV( 2.5f, normal ) ), color );
-				normalError[i] =
-					acosf( b3MinFloat( b3Dot( normal, deckUp ), 1.0f ) ) * 180.0f / B3_PI;
+				normalError[i] = acosf( b3MinFloat( b3Dot( normal, deckUp ), 1.0f ) ) * 180.0f / B3_PI;
 			}
 
 			DrawString3D( b3OffsetPos( center, b3MulSV( 3.0f, deckUp ) ), color, "%s",
@@ -2215,8 +2182,7 @@ public:
 			}
 
 			b3Vec3 tip = b3MulAdd( mark, m_slideScale, offset );
-			DrawArrow( b3Body_GetWorldPoint( m_deckId, mark ),
-					   b3Body_GetWorldPoint( m_deckId, tip ), color );
+			DrawArrow( b3Body_GetWorldPoint( m_deckId, mark ), b3Body_GetWorldPoint( m_deckId, tip ), color );
 
 			m_maxSlide[i] = b3MaxFloat( m_maxSlide[i], slide[i] );
 			m_maxNormalError[i] = b3MaxFloat( m_maxNormalError[i], normalError[i] );
@@ -2234,17 +2200,14 @@ public:
 					  b3World_GetCounters( m_worldId ).recycledContactCount );
 		DrawTextLine( "orange, recycling on : normal %4.1f deg off the deck's up (most %4.1f), "
 					  "slid %5.1f mm (most %5.1f)",
-					  normalError[0], m_maxNormalError[0], 1000.0f * slide[0],
-					  1000.0f * m_maxSlide[0] );
+					  normalError[0], m_maxNormalError[0], 1000.0f * slide[0], 1000.0f * m_maxSlide[0] );
 		DrawTextLine( "blue,   recycling off: normal %4.1f deg off the deck's up (most %4.1f), "
 					  "slid %5.1f mm (most %5.1f)",
-					  normalError[1], m_maxNormalError[1], 1000.0f * slide[1],
-					  1000.0f * m_maxSlide[1] );
-		DrawTextLine(
-			"recycled, the crate moves straight up and down: offset * (1 - cos(roll)) = %.1f mm at "
-			"each end; past the "
-			"%.0f cm recycle distance the contact is made again tilted and the crate walks off",
-			1000.0f * expected, 100.0f * b3World_GetContactRecycleDistance( m_worldId ) );
+					  normalError[1], m_maxNormalError[1], 1000.0f * slide[1], 1000.0f * m_maxSlide[1] );
+		DrawTextLine( "recycled, the crate moves straight up and down: offset * (1 - cos(roll)) = %.1f mm at "
+					  "each end; past the "
+					  "%.0f cm recycle distance the contact is made again tilted and the crate walks off",
+					  1000.0f * expected, 100.0f * b3World_GetContactRecycleDistance( m_worldId ) );
 		DrawTextLine( "arrows: white is the deck's up, colored is the contact normal; slide arrows "
 					  "on the deck are drawn %.0fx",
 					  m_slideScale );
@@ -2425,8 +2388,7 @@ public:
 	}
 
 	// Cast one wheel's ray and apply its suspension and tyre forces to the chassis
-	void UpdateWheel( Wheel& wheel, b3WorldTransform transform, float timeStep, float acceleration,
-					  float steer )
+	void UpdateWheel( Wheel& wheel, b3WorldTransform transform, float timeStep, float acceleration, float steer )
 	{
 		b3Vec3 up = b3RotateVector( transform.q, b3Vec3_axisY );
 		b3Vec3 forward = b3RotateVector( transform.q, b3Vec3_axisX );
@@ -2473,8 +2435,7 @@ public:
 		{
 			heading = b3RotateVector( b3MakeQuatFromAxisAngle( up, steer ), forward );
 		}
-		b3Vec3 rolling =
-			b3Normalize( b3MulAdd( heading, -b3Dot( heading, hit.normal ), hit.normal ) );
+		b3Vec3 rolling = b3Normalize( b3MulAdd( heading, -b3Dot( heading, hit.normal ), hit.normal ) );
 		b3Vec3 lateral = b3Cross( hit.normal, rolling );
 
 		// The lateral force cancels the contact point's sideways sliding in one step. The rolling
@@ -2496,8 +2457,7 @@ public:
 			rollingForce *= maxForce / magnitude;
 		}
 
-		b3Vec3 tyreForce =
-			b3Add( b3MulSV( rollingForce, rolling ), b3MulSV( lateralForce, lateral ) );
+		b3Vec3 tyreForce = b3Add( b3MulSV( rollingForce, rolling ), b3MulSV( lateralForce, lateral ) );
 		b3Body_ApplyForce( m_chassisId, tyreForce, hit.point, true );
 	}
 
@@ -2579,5 +2539,601 @@ public:
 	float m_steeringAngle;
 };
 
-static int sampleRaycastVehicle =
-	RegisterSample( "Vehicle", "Raycast Vehicle", RaycastVehicle::Create );
+static int sampleRaycastVehicle = RegisterSample( "Vehicle", "Raycast Vehicle", RaycastVehicle::Create );
+
+// A user wants the load on a static body C when a box A lands on it, sometimes through a thin sleeping
+// plate B. Hit events report approach speed, and a resting plate has none against C, so C gets no hit
+// event when B is in the middle. Summing the contact impulses on C each step gives the load either way.
+class StaticLoad : public Sample
+{
+public:
+	static constexpr float m_boxHalf = 1.0f;
+	static constexpr float m_tableTop = 3.0f;
+	static constexpr float m_dropX = 1.5f;
+	static constexpr int m_settleSteps = 10;
+	static constexpr int m_historyCapacity = 240;
+	static constexpr int m_maxHits = 12;
+
+	explicit StaticLoad( SampleContext* context )
+		: Sample( context )
+	{
+		if ( context->restart == false )
+		{
+			m_camera->SetView( 20.0f, 15.0f, 22.0f, { 0.0f, 5.0f, 0.0f } );
+		}
+
+		// The weld to the wall lives in game code, so Box3D only sees two static bodies
+		{
+			b3BodyDef bodyDef = b3DefaultBodyDef();
+			bodyDef.name = "wall";
+			bodyDef.position = { -4.25f, 4.0f, 0.0f };
+			b3BodyId wallId = b3CreateBody( m_worldId, &bodyDef );
+
+			b3BoxHull box = b3MakeBoxHull( 0.25f, 4.0f, 3.0f );
+			b3ShapeDef shapeDef = b3DefaultShapeDef();
+			b3CreateHullShape( wallId, &shapeDef, &box.base );
+		}
+
+		{
+			b3BodyDef bodyDef = b3DefaultBodyDef();
+			bodyDef.name = "C";
+			bodyDef.position = { 0.0f, m_tableTop - 1.0f, 0.0f };
+			m_bodyC = b3CreateBody( m_worldId, &bodyDef );
+
+			b3BoxHull box = b3MakeBoxHull( 4.0f, 1.0f, 2.0f );
+			b3ShapeDef shapeDef = b3DefaultShapeDef();
+			shapeDef.enableHitEvents = true;
+			m_shapeC = b3CreateHullShape( m_bodyC, &shapeDef, &box.base );
+		}
+
+		Reset();
+	}
+
+	void Reset()
+	{
+		if ( B3_IS_NON_NULL( m_bodyA ) )
+		{
+			b3DestroyBody( m_bodyA );
+		}
+
+		if ( B3_IS_NON_NULL( m_bodyB ) )
+		{
+			b3DestroyBody( m_bodyB );
+		}
+
+		m_bodyA = b3_nullBodyId;
+		m_bodyB = b3_nullBodyId;
+		m_shapeA = b3_nullShapeId;
+		m_shapeB = b3_nullShapeId;
+
+		m_resetStep = m_stepCount;
+		m_lastStep = m_stepCount;
+		m_dropped = false;
+		m_massA = 0.0f;
+		m_massB = 0.0f;
+		m_impactStep = -1;
+		m_impactSpeed = 0.0f;
+		m_excessImpulse = 0.0f;
+		m_stepImpulseC = 0.0f;
+		m_stepImpulseAB = 0.0f;
+		m_stepImpulseAC = 0.0f;
+		m_stepImpulseBC = 0.0f;
+		m_peakForceC = 0.0f;
+		m_peakForceAB = 0.0f;
+		m_peakForceAC = 0.0f;
+		m_peakForceBC = 0.0f;
+		m_peakStep = -1;
+		m_hitCountC = 0;
+		m_hitCountB = 0;
+		m_hitCount = 0;
+		m_historyCount = 0;
+		m_historyIndex = 0;
+
+		if ( m_includeB )
+		{
+			b3BodyDef bodyDef = b3DefaultBodyDef();
+			bodyDef.type = b3_dynamicBody;
+			bodyDef.name = "B";
+			bodyDef.position = { m_dropX, m_tableTop + m_plateHalfHeight, 0.0f };
+			m_bodyB = b3CreateBody( m_worldId, &bodyDef );
+
+			b3BoxHull box = b3MakeBoxHull( 1.5f, m_plateHalfHeight, 1.0f );
+			b3ShapeDef shapeDef = b3DefaultShapeDef();
+			shapeDef.density = m_densityB;
+			shapeDef.enableHitEvents = true;
+			m_shapeB = b3CreateHullShape( m_bodyB, &shapeDef, &box.base );
+		}
+		else
+		{
+			DropA();
+		}
+	}
+
+	// B rests on C long enough to build its contact, then sleeps the way a settled game object would
+	void DropA()
+	{
+		float baseY = m_tableTop;
+		if ( m_includeB )
+		{
+			if ( m_sleepB )
+			{
+				b3Body_SetAwake( m_bodyB, false );
+			}
+
+			baseY += 2.0f * m_plateHalfHeight;
+		}
+
+		b3BodyDef bodyDef = b3DefaultBodyDef();
+		bodyDef.type = b3_dynamicBody;
+		bodyDef.name = "A";
+		bodyDef.position = { m_dropX, baseY + m_dropHeight + m_boxHalf, 0.0f };
+		m_bodyA = b3CreateBody( m_worldId, &bodyDef );
+
+		b3BoxHull box = b3MakeBoxHull( m_boxHalf, m_boxHalf, m_boxHalf );
+		b3ShapeDef shapeDef = b3DefaultShapeDef();
+		shapeDef.density = m_densityA;
+		shapeDef.enableHitEvents = true;
+		m_shapeA = b3CreateHullShape( m_bodyA, &shapeDef, &box.base );
+
+		m_massA = b3Body_GetMass( m_bodyA );
+		m_massB = m_includeB ? b3Body_GetMass( m_bodyB ) : 0.0f;
+		m_dropped = true;
+	}
+
+	const char* Label( b3ShapeId shapeId ) const
+	{
+		if ( B3_ID_EQUALS( shapeId, m_shapeA ) )
+		{
+			return "A";
+		}
+
+		if ( B3_ID_EQUALS( shapeId, m_shapeB ) )
+		{
+			return "B";
+		}
+
+		if ( B3_ID_EQUALS( shapeId, m_shapeC ) )
+		{
+			return "C";
+		}
+
+		return "?";
+	}
+
+	// Total normal impulse a contact applied over the step, sub-steps and restitution included.
+	// A speculative point that never pushed contributes zero.
+	static float ContactImpulse( const b3ContactData& data )
+	{
+		float impulse = 0.0f;
+		for ( int i = 0; i < data.manifoldCount; ++i )
+		{
+			const b3Manifold& manifold = data.manifolds[i];
+			for ( int j = 0; j < manifold.pointCount; ++j )
+			{
+				impulse += manifold.points[j].totalNormalImpulse;
+			}
+		}
+
+		return impulse;
+	}
+
+	// Sum the impulse on a shape from every touching contact, or only the one against a given shape
+	float ShapeImpulse( b3ShapeId shapeId, b3ShapeId otherId, bool drawArrows )
+	{
+		if ( B3_IS_NULL( shapeId ) )
+		{
+			return 0.0f;
+		}
+
+		int capacity = b3Shape_GetContactCapacity( shapeId );
+		m_contactData.resize( capacity );
+		int count = b3Shape_GetContactData( shapeId, m_contactData.data(), capacity );
+
+		float hertz = m_context->hertz;
+		float arrowScale = m_restingWeight > 0.0f ? 1.0f / m_restingWeight : 0.0f;
+
+		float impulse = 0.0f;
+		for ( int i = 0; i < count; ++i )
+		{
+			const b3ContactData& data = m_contactData[i];
+			bool isShapeA = B3_ID_EQUALS( data.shapeIdA, shapeId );
+			b3ShapeId other = isShapeA ? data.shapeIdB : data.shapeIdA;
+			if ( B3_IS_NON_NULL( otherId ) && B3_ID_EQUALS( other, otherId ) == false )
+			{
+				continue;
+			}
+
+			impulse += ContactImpulse( data );
+
+			if ( drawArrows == false )
+			{
+				continue;
+			}
+
+			// The normal points from shape A to shape B, so it pushes on B and pulls on A
+			b3Pos center = b3Body_GetWorldCenter( b3Shape_GetBody( data.shapeIdA ) );
+			for ( int j = 0; j < data.manifoldCount; ++j )
+			{
+				const b3Manifold& manifold = data.manifolds[j];
+				b3Vec3 direction = isShapeA ? -manifold.normal : manifold.normal;
+				for ( int k = 0; k < manifold.pointCount; ++k )
+				{
+					const b3ManifoldPoint& mp = manifold.points[k];
+					if ( mp.totalNormalImpulse <= 0.0f )
+					{
+						continue;
+					}
+
+					// One meter per resting weight, clamped so an impact spike stays on screen
+					float length = b3MinFloat( mp.totalNormalImpulse * hertz * arrowScale, 4.0f );
+					b3Pos p = b3OffsetPos( center, mp.anchorA );
+					DrawArrow( b3OffsetPos( p, -length * direction ), p, MakeColor( b3_colorRed ) );
+				}
+			}
+		}
+
+		return impulse;
+	}
+
+	void Step() override
+	{
+		b3Vec3 velocityA = B3_IS_NON_NULL( m_bodyA ) ? b3Body_GetLinearVelocity( m_bodyA ) : b3Vec3_zero;
+
+		Sample::Step();
+
+		float gravity = -b3World_GetGravity( m_worldId ).y;
+		m_restingWeight = ( m_massA + m_massB ) * gravity;
+
+		// A thin B leaves A within speculative reach of C, so part of the load can skip B entirely
+		m_stepImpulseC = ShapeImpulse( m_shapeC, b3_nullShapeId, true );
+		m_stepImpulseAC = ShapeImpulse( m_shapeC, m_shapeA, false );
+		m_stepImpulseBC = ShapeImpulse( m_shapeC, m_shapeB, false );
+		m_stepImpulseAB = ShapeImpulse( m_shapeA, m_shapeB, false );
+		float impulseA = ShapeImpulse( m_shapeA, b3_nullShapeId, false );
+
+		// Pausing keeps the last step's events, so only consume a step once
+		if ( m_stepCount != m_lastStep )
+		{
+			m_lastStep = m_stepCount;
+			ProcessStep( impulseA, velocityA );
+		}
+
+		DrawHits();
+		DrawStats();
+	}
+
+	void ProcessStep( float impulseA, b3Vec3 velocityA )
+	{
+		if ( m_dropped == false )
+		{
+			if ( m_stepCount - m_resetStep >= m_settleSteps )
+			{
+				DropA();
+			}
+			return;
+		}
+
+		float hertz = m_context->hertz;
+		float timeStep = hertz > 0.0f ? 1.0f / hertz : 0.0f;
+
+		if ( m_impactStep < 0 && impulseA > 0.0f )
+		{
+			m_impactStep = m_stepCount;
+			m_impactSpeed = -velocityA.y;
+
+			if ( m_pauseOnImpact )
+			{
+				m_context->pause = true;
+			}
+		}
+
+		// From impact on, the impulse on C beyond the resting weight removes the momentum A brought in
+		if ( m_impactStep >= 0 )
+		{
+			m_excessImpulse += m_stepImpulseC - m_restingWeight * timeStep;
+		}
+
+		float forceC = m_stepImpulseC * hertz;
+		float forceAB = m_stepImpulseAB * hertz;
+		if ( forceC > m_peakForceC )
+		{
+			m_peakForceC = forceC;
+			m_peakStep = m_stepCount;
+		}
+
+		m_peakForceAB = b3MaxFloat( m_peakForceAB, forceAB );
+		m_peakForceAC = b3MaxFloat( m_peakForceAC, m_stepImpulseAC * hertz );
+		m_peakForceBC = b3MaxFloat( m_peakForceBC, m_stepImpulseBC * hertz );
+
+		m_historyC[m_historyIndex] = forceC;
+		m_historyAB[m_historyIndex] = forceAB;
+		m_historyIndex = ( m_historyIndex + 1 ) % m_historyCapacity;
+		m_historyCount = b3MinInt( m_historyCount + 1, m_historyCapacity );
+
+		b3ContactEvents events = b3World_GetContactEvents( m_worldId );
+		for ( int i = 0; i < events.hitCount; ++i )
+		{
+			const b3ContactHitEvent& event = events.hitEvents[i];
+			bool touchesC = B3_ID_EQUALS( event.shapeIdA, m_shapeC ) || B3_ID_EQUALS( event.shapeIdB, m_shapeC );
+			bool touchesB = B3_ID_EQUALS( event.shapeIdA, m_shapeB ) || B3_ID_EQUALS( event.shapeIdB, m_shapeB );
+			m_hitCountC += touchesC ? 1 : 0;
+			m_hitCountB += touchesB ? 1 : 0;
+
+			HitRecord record = {};
+			record.event = event;
+			record.step = m_stepCount;
+			if ( b3Contact_IsValid( event.contactId ) )
+			{
+				record.impulse = ContactImpulse( b3Contact_GetData( event.contactId ) );
+			}
+
+			// Newest first, dropping the oldest when full
+			int count = b3MinInt( m_hitCount, m_maxHits - 1 );
+			for ( int j = count; j > 0; --j )
+			{
+				m_hits[j] = m_hits[j - 1];
+			}
+
+			m_hits[0] = record;
+			m_hitCount = count + 1;
+		}
+	}
+
+	void DrawHits()
+	{
+		for ( int i = 0; i < m_hitCount; ++i )
+		{
+			const b3ContactHitEvent& event = m_hits[i].event;
+			b3Pos p1 = event.point;
+			b3Pos p2 = b3OffsetPos( p1, -event.approachSpeed * event.normal );
+			DrawPoint( p1, 10.0f, MakeColor( b3_colorYellow ) );
+			DrawLine( p1, p2, MakeColor( b3_colorYellow ) );
+			DrawString3D( p1, MakeColor( b3_colorWhite ), "%s-%s %.1f m/s", Label( event.shapeIdA ),
+						  Label( event.shapeIdB ), event.approachSpeed );
+		}
+	}
+
+	void DrawStats()
+	{
+		float hertz = m_context->hertz;
+
+		if ( m_dropped == false )
+		{
+			DrawTextLine( "B settling on C" );
+			return;
+		}
+
+		DrawTextLine( "mass A = %.2f kg, mass B = %.2f kg, resting weight on C = %.1f N", m_massA, m_massB,
+					  m_restingWeight );
+
+		if ( m_includeB )
+		{
+			DrawTextLine( "B is %s", b3Body_IsAwake( m_bodyB ) ? "awake" : "asleep" );
+		}
+
+		if ( m_impactStep < 0 )
+		{
+			DrawTextLine( "A falling" );
+			return;
+		}
+
+		float momentum = m_massA * m_impactSpeed;
+		DrawTextLine( "impact at step %d, speed %.2f m/s, momentum %.1f N*s", m_impactStep - m_resetStep, m_impactSpeed,
+					  momentum );
+
+		// No continuous collision between dynamic bodies, so A can sink a full step of travel into B before
+		// they get a contact. If that reaches within speculative distance of C, A loads C directly.
+		if ( m_includeB )
+		{
+			DrawTextLine( "A travels %.2f m per step, B is %.2f m thick", m_impactSpeed / hertz,
+						  2.0f * m_plateHalfHeight );
+		}
+		DrawTextLine( "step load on C = %.1f N (impulse %.3f N*s)", m_stepImpulseC * hertz, m_stepImpulseC );
+		DrawTextLine( "peak load on C = %.1f N at step %d, %.1fx resting weight", m_peakForceC,
+					  m_peakStep - m_resetStep, m_restingWeight > 0.0f ? m_peakForceC / m_restingWeight : 0.0f );
+
+		if ( m_includeB )
+		{
+			DrawTextLine( "  from B = %.1f N, peak %.1f N", m_stepImpulseBC * hertz, m_peakForceBC );
+			DrawTextLine( "  from A directly = %.1f N, peak %.1f N", m_stepImpulseAC * hertz, m_peakForceAC );
+			DrawTextLine( "load A on B = %.1f N, peak %.1f N", m_stepImpulseAB * hertz, m_peakForceAB );
+		}
+
+		DrawTextLine( "impulse on C beyond resting weight = %.1f N*s (A brought %.1f N*s)", m_excessImpulse, momentum );
+		DrawTextLine( "hit events touching C = %d, touching B = %d", m_hitCountC, m_hitCountB );
+
+		for ( int i = 0; i < m_hitCount; ++i )
+		{
+			const HitRecord& record = m_hits[i];
+			DrawTextLine( "  step %d: %s-%s approach %.2f m/s, contact impulse %.3f N*s", record.step - m_resetStep,
+						  Label( record.event.shapeIdA ), Label( record.event.shapeIdB ), record.event.approachSpeed,
+						  record.impulse );
+		}
+	}
+
+	bool DrawControls() override
+	{
+		bool reset = false;
+		reset |= ImGui::Checkbox( "Include B", &m_includeB );
+		reset |= ImGui::Checkbox( "B Asleep", &m_sleepB );
+		reset |= ImGui::SliderFloat( "B Half Thickness", &m_plateHalfHeight, 0.02f, 0.5f, "%.2f m" );
+		reset |= ImGui::SliderFloat( "B Density", &m_densityB, 100.0f, 10000.0f, "%.0f kg/m^3",
+									 ImGuiSliderFlags_Logarithmic );
+		reset |= ImGui::SliderFloat( "A Density", &m_densityA, 100.0f, 10000.0f, "%.0f kg/m^3",
+									 ImGuiSliderFlags_Logarithmic );
+		reset |= ImGui::SliderFloat( "Drop Height", &m_dropHeight, 0.0f, 10.0f, "%.1f m" );
+
+		float threshold = b3World_GetHitEventThreshold( m_worldId );
+		if ( ImGui::SliderFloat( "Hit Threshold", &threshold, 0.0f, 5.0f, "%.2f m/s" ) )
+		{
+			b3World_SetHitEventThreshold( m_worldId, threshold );
+		}
+
+		ImGui::Checkbox( "Pause On Impact", &m_pauseOnImpact );
+
+		if ( ImGui::Button( "Drop Again" ) )
+		{
+			reset = true;
+		}
+
+		if ( reset )
+		{
+			Reset();
+		}
+
+		int offset = m_historyCount < m_historyCapacity ? 0 : m_historyIndex;
+		ImGui::PlotLines( "##loadC", m_historyC, m_historyCount, offset, "load on C (N)", 0.0f, FLT_MAX,
+						  ImVec2( 0.0f, 80.0f ) );
+		ImGui::PlotLines( "##loadAB", m_historyAB, m_historyCount, offset, "load A on B (N)", 0.0f, FLT_MAX,
+						  ImVec2( 0.0f, 80.0f ) );
+
+		return true;
+	}
+
+	static Sample* Create( SampleContext* context )
+	{
+		return new StaticLoad( context );
+	}
+
+	struct HitRecord
+	{
+		b3ContactHitEvent event;
+		float impulse;
+		int step;
+	};
+
+	std::vector<b3ContactData> m_contactData;
+
+	b3BodyId m_bodyA = {};
+	b3BodyId m_bodyB = {};
+	b3BodyId m_bodyC = {};
+	b3ShapeId m_shapeA = {};
+	b3ShapeId m_shapeB = {};
+	b3ShapeId m_shapeC = {};
+
+	HitRecord m_hits[m_maxHits] = {};
+	float m_historyC[m_historyCapacity] = {};
+	float m_historyAB[m_historyCapacity] = {};
+
+	float m_dropHeight = 3.0f;
+	float m_plateHalfHeight = 0.15f;
+	float m_densityA = 1000.0f;
+	float m_densityB = 1000.0f;
+	float m_massA = 0.0f;
+	float m_massB = 0.0f;
+	float m_restingWeight = 0.0f;
+	float m_impactSpeed = 0.0f;
+	float m_excessImpulse = 0.0f;
+	float m_stepImpulseC = 0.0f;
+	float m_stepImpulseAB = 0.0f;
+	float m_stepImpulseAC = 0.0f;
+	float m_stepImpulseBC = 0.0f;
+	float m_peakForceC = 0.0f;
+	float m_peakForceAB = 0.0f;
+	float m_peakForceAC = 0.0f;
+	float m_peakForceBC = 0.0f;
+
+	int m_resetStep = 0;
+	int m_lastStep = 0;
+	int m_impactStep = -1;
+	int m_peakStep = -1;
+	int m_hitCountC = 0;
+	int m_hitCountB = 0;
+	int m_hitCount = 0;
+	int m_historyCount = 0;
+	int m_historyIndex = 0;
+
+	bool m_includeB = true;
+	bool m_sleepB = true;
+	bool m_pauseOnImpact = false;
+	bool m_dropped = false;
+};
+
+static int sampleStaticLoad = RegisterSample( "Issues", "Static Load", StaticLoad::Create );
+
+class TranslationLockedPlatform : public Sample
+{
+public:
+	explicit TranslationLockedPlatform( SampleContext* context )
+		: Sample( context )
+	{
+		if ( context->restart == false )
+		{
+			m_camera->SetView( 0.0f, 10.0f, 10.0f, { 0.0f, 0.5f, 0.0f } );
+		}
+
+		context->hertz = 50.0f;
+		context->subStepCount = 4;
+		b3World_SetGravity( m_worldId, { 0.0f, -20.0f, 0.0f } );
+
+		AddGroundBox( 20.0f );
+
+		b3ShapeDef shapeDef = b3DefaultShapeDef();
+		shapeDef.density = 2.5f;
+		b3BoxHull box = b3MakeBoxHull( 2.0f, m_platformHalfHeight, 0.5f );
+		b3Sphere sphere = { b3Vec3_zero, m_radius };
+
+		for ( int i = 0; i < 2; ++i )
+		{
+			float x = i == 0 ? -3.0f : 3.0f;
+			b3BodyDef platformDef = b3DefaultBodyDef();
+			platformDef.type = i == 0 ? b3_staticBody : b3_dynamicBody;
+			platformDef.position = { x, m_platformY, 0.0f };
+			platformDef.gravityScale = 0.0f;
+			platformDef.enableSleep = false;
+			b3BodyId platformId = b3CreateBody( m_worldId, &platformDef );
+			b3CreateHullShape( platformId, &shapeDef, &box.base );
+
+			if ( platformDef.type == b3_dynamicBody )
+			{
+				LockMotion( platformId, {
+											.linearX = true,
+											.linearY = true,
+											.linearZ = true,
+											.rotation = e_spinZ,
+										} );
+			}
+
+			b3BodyDef bodyDef = b3DefaultBodyDef();
+			bodyDef.type = b3_dynamicBody;
+			bodyDef.position = { x, m_platformY + m_platformHalfHeight + m_radius + 0.1f, 0.0f };
+			bodyDef.enableSleep = false;
+			m_spheres[i] = b3CreateBody( m_worldId, &bodyDef );
+			b3CreateSphereShape( m_spheres[i], &shapeDef, &sphere );
+
+			b3MassData massData = b3Body_GetMassData( m_spheres[i] );
+			massData.inertia = b3MulSM( 10.0f / massData.mass, massData.inertia );
+			massData.mass = 10.0f;
+			b3Body_SetMassData( m_spheres[i], massData );
+		}
+	}
+
+	void Render() override
+	{
+		DrawTextLine( "10 kg spheres dropped onto 0.1 m thick platforms." );
+		DrawTextLine( "Right platform: 1 kg, translation locked, rotation about Z free." );
+		DrawTextLine( "Expected: both gaps settle near zero. Negative means penetration." );
+		DrawTextLine( "Left  (static): gap = %.3f m", GetGap( 0 ) );
+		DrawTextLine( "Right (locked): gap = %.3f m", GetGap( 1 ) );
+	}
+
+	float GetGap( int index )
+	{
+		float restY = m_platformY + m_platformHalfHeight + m_radius;
+		return (float)b3Body_GetPosition( m_spheres[index] ).y - restY;
+	}
+
+	static Sample* Create( SampleContext* context )
+	{
+		return new TranslationLockedPlatform( context );
+	}
+
+	static constexpr float m_platformY = 2.0f;
+	static constexpr float m_platformHalfHeight = 0.05f;
+	static constexpr float m_radius = 0.5f;
+
+	b3BodyId m_spheres[2];
+};
+
+static int sampleTranslationLockedPlatform =
+	RegisterSample( "Issues", "Translation Locked Platform", TranslationLockedPlatform::Create );

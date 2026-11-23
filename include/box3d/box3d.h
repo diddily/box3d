@@ -56,6 +56,13 @@ B3_API bool b3World_IsValid( b3WorldId id );
 /// accuracy. Usually 4.
 B3_API void b3World_Step( b3WorldId worldId, float timeStep, int subStepCount );
 
+/// The pull model for tasking. Instead of getting task callbacks from b3World_Step you can call
+/// this to kick off a step and get an array of tasks to execute.
+B3_API b3TaskBatch b3World_BeginStep( b3WorldId worldId, float timeStep, int subStepCount );
+
+/// Call this after executing each task batch. The step is done when the batch is empty.
+B3_API b3TaskBatch b3World_ContinueStep( b3WorldId worldId );
+
 /// Call this to draw shapes and other debug draw data
 B3_API void b3World_Draw( b3WorldId worldId, b3DebugDraw* draw, uint64_t maskBits );
 
@@ -759,11 +766,11 @@ B3_API void b3Body_Disable( b3BodyId bodyId );
 /// Enable a body by adding it to the simulation. This is expensive.
 B3_API void b3Body_Enable( b3BodyId bodyId );
 
-/// Set the motion locks on this body.
-B3_API void b3Body_SetMotionLocks( b3BodyId bodyId, b3MotionLocks locks );
+/// Fix the rotation of this body. Sets the angular velocity to zero.
+B3_API void b3Body_SetFixedRotation( b3BodyId bodyId, bool flag );
 
-/// Get the motion locks for this body.
-B3_API b3MotionLocks b3Body_GetMotionLocks( b3BodyId bodyId );
+/// Does this body have fixed rotation?
+B3_API bool b3Body_IsFixedRotation( b3BodyId bodyId );
 
 /// Set this body to be a bullet. A bullet does continuous collision detection
 /// against dynamic bodies (but not other bullets).
@@ -1240,6 +1247,30 @@ B3_API void b3ParallelJoint_SetMaxTorque( b3JointId jointId, float force );
 B3_API float b3ParallelJoint_GetMaxTorque( b3JointId jointId );
 
 /** @} */ // parallel_joint
+
+/**
+ * @defgroup motion_lock_joint Motion Lock Joint
+ * @brief Functions for the motion lock joint.
+ * @{
+ */
+
+/// Create a motion lock joint.
+/// @see b3MotionLockJointDef for details
+B3_API b3JointId b3CreateMotionLockJoint( b3WorldId worldId, const b3MotionLockJointDef* def );
+
+/// Enable/disable a linear lock.
+B3_API void b3MotionLockJoint_EnableLinearLock( b3JointId jointId, int axis, bool flag );
+
+/// Is a linear lock enabled?
+B3_API bool b3MotionLockJoint_IsLinearLockEnabled( b3JointId jointId, int axis );
+
+/// Enable/disable the angular lock.
+B3_API void b3MotionLockJoint_EnableAngularLock( b3JointId jointId, bool flag );
+
+/// Is the angular lock enabled?
+B3_API bool b3MotionLockJoint_IsAngularLockEnabled( b3JointId jointId );
+
+/** @} */ // motion_lock_joint
 
 /**
  * @defgroup distance_joint Distance Joint
@@ -1745,9 +1776,7 @@ B3_API void b3SphericalJoint_EnableMotor( b3JointId jointId, bool enableMotor );
 /// Is the spherical joint motor enabled?
 B3_API bool b3SphericalJoint_IsMotorEnabled( b3JointId jointId );
 
-/// Set the spherical joint motor velocity in radians per second. This is the relative angular
-/// velocity between the two bodies in world space.
-/// motorVelocity = angularVelocityB - angularVelocityA
+/// Set the spherical joint motor velocity in radians per second.
 B3_API void b3SphericalJoint_SetMotorVelocity( b3JointId jointId, b3Vec3 motorVelocity );
 
 /// Get the spherical joint motor velocity in radians per second

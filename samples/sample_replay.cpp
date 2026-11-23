@@ -98,6 +98,8 @@ static const char* ReplayJointTypeName( b3JointType type )
 			return "mover";
 		case b3_pogoJoint:
 			return "pogo";
+		case b3_motionLockJoint:
+			return "motion lock";
 		default:
 			return "?";
 	}
@@ -702,6 +704,12 @@ public:
 	bool HasProfile() const override
 	{
 		return false;
+	}
+
+	// The base world before a recording is open
+	b3WorldId GetMetricsWorldId() const override
+	{
+		return B3_IS_NON_NULL( m_replayWorldId ) ? m_replayWorldId : m_worldId;
 	}
 
 	// Wider than the default so the detail pane, hosted in the info panel, has room for ids and vectors.
